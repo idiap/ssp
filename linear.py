@@ -7,27 +7,50 @@
 # Author(s):
 #   Phil Garner
 #
-from ssp import *
-import numpy as np
-import matplotlib.pyplot as plt
+import argparse
+ap = argparse.ArgumentParser('Autoregressive modelling')
+ap.add_argument('file')
+arg = ap.parse_args()
 
-# Read wav file
-#file = "40jc020c.wav"
-file = "FAC_369O5A.wav"
+import time
+
+# Timer
+ti = time.clock()
+def lap(func):
+  global ti
+  now = time.clock()
+  elapsed = now-ti
+  ti = now
+  print func, elapsed
+
+from ssp import *
+lap("ssp")
+import numpy as np
+lap("numpy")
+import matplotlib.pyplot as plt
+lap("plt")
 
 # Load and process
-r, a = WavSource(file)
+print "Using file:", arg.file
+r, a = WavSource(arg.file)
 print "rate:", r, "size:", a.size
 a = ZeroFilter(a)
 f = Frame(a)
 print "frame: ", f.shape[0], "x ", f.shape[1]
+lap("Frame")
 
 p = Periodogram(f)
+lap("Periodogram")
 a = Autocorrelation(f)
-a, g = ARLevinson(a, order=7)
+lap("AC")
+a, g = ARLevinson(a, 7)
+lap("Levinson")
 ls = ARSpectrum(a, g)
-wa, wg = BilinearWarpAR(a, g, alpha=0.31)
+lap("Spectrum")
+wa, wg = ARBilinearWarp(a, g, alpha=0.31)
+lap("Warp")
 ws = ARSpectrum(wa, wg)
+lap("Spectrum")
 
 # Draw it
 # fig.add_subplot(2,1,1) # two rows, one column, first plot

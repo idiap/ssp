@@ -11,6 +11,7 @@ import numpy as np
 import numpy.linalg as linalg
 from scipy.io import wavfile
 
+# Load a .wav file
 def WavSource(file):
     rate, audio = wavfile.read(file)
     if audio.dtype == 'int16':
@@ -18,8 +19,8 @@ def WavSource(file):
         audio /= 32768
     return rate, audio
 
-def ZeroFilter(a):
-    zero = 0.97
+# Filter comprising a single zero
+def ZeroFilter(a, zero=0.97):
     filter = np.zeros(a.size)
     store = a[0]
     for i in range(a.size):
@@ -27,6 +28,7 @@ def ZeroFilter(a):
         store = a[i]
     return filter
 
+# Convert array to framed array
 def Frame(a, size=512, period=256):
     nFrames = (a.size - (size-period)) // period
     frame = np.zeros((nFrames, size))
@@ -36,6 +38,7 @@ def Frame(a, size=512, period=256):
         frame[r, :] = a[s:e]
     return frame
 
+# Frame energy
 def Energy(a):
     e = np.zeros(a.shape[0])
     for r in range(a.shape[0]):
@@ -88,107 +91,125 @@ def ARMatrix(a, order=10, method='matrix'):
 
     return (coeff, gain)
 
+# Levinson-Durbin recursion to calculate reflection coefficients from
+# autocorrelaton.
 def ARLevinson(ac, order=10):
-    tmp0 = np.zeros(order)
-    tmp1 = np.zeros(order)
-    curr = tmp0.view()
-    prev = tmp1.view()
-    coeff = np.zeros((ac.shape[0], order))
-    gain = np.ones(ac.shape[0])
-    for r in range(ac.shape[0]):
-        curr.fill(0)
-        prev.fill(0)
-        error = ac[r,0]
-        if error < 1e-8:
-            print "error: ", error
-        for i in range(order):
-            # swap current and previous coefficients
-            tmp = curr.view()
-            curr = prev.view()
-            prev = tmp.view()
+    if ac.ndim > 1:
+        ret = np.ndarray((ac.shape[0], order))
+        gain = np.ndarray(ac.shape[0])
+        for f in range(ac.shape[0]):
+            ret[f], gain[f] = ARLevinson(ac[f], order)
+        return ret, gain
+    
+    curr = np.zeros(order)
+    prev = np.zeros(order)
+    error = ac[0]
+    if error < 1e-8:
+        print "error: ", error
+    for i in range(order):
+        # swap current and previous coefficients
+        tmp = curr
+        curr = prev
+        prev = tmp
 
-            # Recurse
-            k = ac[r,i+1]
-            for j in range(i):
-                k -= prev[j] * ac[r, i-j]
-            curr[i] = k / error
-            error *= 1 - curr[i]**2
-            for j in range(i):
-                curr[j] = prev[j] - curr[i] * prev[i-j-1]
+        # Recurse
+        k = ac[i+1]
+        for j in range(i):
+            k -= prev[j] * ac[i-j]
+        curr[i] = k / error
+        error *= 1 - curr[i]**2
+        for j in range(i):
+            curr[j] = prev[j] - curr[i] * prev[i-j-1]
 
-        # Whichever curr is viewing is the output
-        coeff[r,:] = curr
+    # Actually calculates gain squared
+    gain = ac[0] - np.dot(curr, ac[1:order+1])
+    gain /= ac.size
+    return curr, gain
 
-        # Dot product would be better
-        gain[r] = ac[r, 0]
-        for i in range(order):
-            gain[r] -= coeff[r,i] * ac[r,i+1]
-
-    gain /= ac.shape[1]
-    return (coeff, gain)
-
-# Compute power spectrum
-def ARSpectrum(a, g, nSpec=256):
+# AR power spectrum
+def ARSpectrum(a, g, nSpec=256, twiddle=None):
+    if twiddle is None:
+        # Pre-compute the "twiddle" factors; saves a lot of CPU
+        twiddle = np.ndarray((nSpec,a.shape[a.ndim-1]), dtype='complex')
+        for i in range(nSpec):
+            for j in range(twiddle.shape[1]):
+                twiddle[i,j] = np.exp(-1j * np.pi * i * (j+1) / nSpec)
     if a.ndim > 1:
         ret = np.ndarray((a.shape[0], nSpec))
         for f in range(a.shape[0]):
-            ret[f] = ARSpectrum(a[f], g[f], nSpec)
+            ret[f] = ARSpectrum(a[f], g[f], nSpec, twiddle)
         return ret
     
     spec = np.ndarray(nSpec)
     for i in range(nSpec):
-        omega = np.pi * i / nSpec
-        sm = 0j
-        for j in range(a.size):
-            sm += a[j] * np.exp(-1j * omega * (j+1))
+        sm = np.dot(a,twiddle[i])
         spec[i] = g / abs(1 - sm)**2
     return spec
 
 # Bilinear transform
-def BilinearWarp(a, alpha=0.0, size=None):
-    if a.ndim > 1:
-        ret = np.ndarray(a.shape)
-        for f in range(a.shape[0]):
-            ret[f] = BilinearWarp(a[f], alpha, size)
-        return ret
-    
-    isize = a.size
+def BilinearWarpOppenheim(a, alpha=0.0, size=None):
+    isize = a.shape[a.ndim-1]
     if size is None:
         osize = isize
     else:
         osize = size
-    tmp0 = np.ndarray(osize)
-    tmp1 = np.ndarray(osize)
-    t = tmp0
-    y = tmp1
-    out = np.ndarray(osize)
+
+    if a.ndim > 1:
+        ret = np.ndarray((a.shape[0], osize))
+        for f in range(a.shape[0]):
+            ret[f] = BilinearWarpOppenheim(a[f], alpha, size)
+        return ret
+    
+    # Oppenheim's recursion; very slow
+    t = np.zeros(osize)
+    y = np.zeros(osize)
     alpha2 = 1-alpha**2
-    for r in range(a.shape[0]):
-        t.fill(0)
-        y.fill(0)
-        for k in range(isize-1,-1,-1):
-            t[0] = alpha * y[0] + a[k]
-            t[1] = alpha * y[1] + alpha2 * y[0]
-            for n in range(2,osize):
-                t[n] = y[n-1] + alpha * (y[n] - t[n-1])
+    for k in range(isize-1,-1,-1):
+        t[0] = alpha * y[0] + a[k]
+        t[1] = alpha * y[1] + alpha2 * y[0]
+        for n in range(2,osize):
+            t[n] = y[n-1] + alpha * (y[n] - t[n-1])
 
-            tmp = y
-            y = t
-            t = tmp
-        out = y
+        tmp = y
+        y = t
+        t = tmp
 
-    return out
+    return y
 
-# In the AR case, we need to prepend a 1
-def BilinearWarpAR(a, g, alpha=0):
+# Bilinear warp of AR coefficients that exclude a[0], i.e., we need to
+# prepend a 1 for the standard warp to work.
+def ARBilinearWarp(a, g, alpha=0, matrix=None):
+    if matrix is None:
+        m = BilinearWarpMatrix(a.shape[a.ndim-1]+1, alpha)
+    else:
+        m = matrix
     if a.ndim > 1:
         reta = np.ndarray(a.shape)
         retg = np.ndarray(g.shape)
         for f in range(a.shape[0]):
-            reta[f], retg[f] = BilinearWarpAR(a[f], g[f], alpha)
+            reta[f], retg[f] = ARBilinearWarp(a[f], g[f], alpha, m)
         return reta, retg
 
-    a = BilinearWarp(np.insert(a, 0, 1), alpha)
+    # In the AR case, we need to prepend a 1
+    a = np.dot(m, np.insert(a, 0, 1))
     g /= a[0]
     a /= a[0]
     return a[1:], g
+
+# Oppenheim's recursion expressed as a matrix.
+def BilinearWarpMatrix(n, alpha=0.0, size=None):
+    if size is None:
+        rows = n
+    else:
+        rows = size
+
+    a = np.ndarray((rows, n))
+    for j in range(n):
+        a[0,j] = alpha**j
+    for i in range(1, rows):
+        a[i,0] = 0
+    for i in range(1, rows):
+        for j in range(1, n):
+            a[i,j] = a[i-1,j-1] + alpha * (a[i,j-1] - a[i-1,j])
+
+    return a
