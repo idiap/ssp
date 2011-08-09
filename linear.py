@@ -35,7 +35,7 @@ print "Using file:", arg.file
 r, a = WavSource(arg.file)
 print "rate:", r, "size:", a.size
 a = ZeroFilter(a)
-f = Frame(a)
+f = Frame(a, size=256, period=128)
 print "frame: ", f.shape[0], "x ", f.shape[1]
 lap("Frame")
 
@@ -43,19 +43,20 @@ p = Periodogram(f)
 lap("Periodogram")
 a = Autocorrelation(f)
 lap("AC")
-a, g = ARLevinson(a, 7)
+a, g = ARLevinson(a, order=9)
 lap("Levinson")
-ls = ARSpectrum(a, g)
+ls = ARSpectrum(a, g, nSpec=128)
 lap("Spectrum")
-wa, wg = ARBilinearWarp(a, g, alpha=0.31)
+wa, wg = ARBilinearWarp(a, g, alpha=mel[r])
 lap("Warp")
-ws = ARSpectrum(wa, wg)
+ws = ARSpectrum(wa, wg, nSpec=128)
 lap("Spectrum")
 
 # Draw it
 # fig.add_subplot(2,1,1) # two rows, one column, first plot
-frame = 63
+frame = 10
 fig = plt.figure()
+plt.bone()
 pdfSpec = fig.add_subplot(3,2,1)
 pdfPlot = fig.add_subplot(3,2,2)
 larSpec = fig.add_subplot(3,2,3)
@@ -64,7 +65,7 @@ warSpec = fig.add_subplot(3,2,5)
 warPlot = fig.add_subplot(3,2,6)
 
 pdfSpec.imshow(np.rot90(np.log10(p[:,:p.shape[1]/2+1])), aspect='auto')
-pdfPlot.plot(np.log10(p[frame,:p.shape[1]/2+1]))
+larPlot.plot(np.log10(p[frame,:p.shape[1]/2+1]))
 larSpec.imshow(np.rot90(np.log10(ls)), aspect='auto')
 larPlot.plot(np.log10(ls[frame]))
 warSpec.imshow(np.rot90(np.log10(ws)), aspect='auto')

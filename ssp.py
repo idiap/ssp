@@ -46,7 +46,7 @@ def Energy(a):
     return e
 
 def Periodogram(a):
-    psd = np.zeros(a.shape)
+    psd = np.ndarray(a.shape)
     for r in range(a.shape[0]):
         dft = np.fft.fft(a[r, :])
         psd[r, :] = np.abs(dft)**2
@@ -123,7 +123,6 @@ def ARLevinson(ac, order=10):
 
     # Actually calculates gain squared
     gain = ac[0] - np.dot(curr, ac[1:order+1])
-    gain /= ac.size
     return curr, gain
 
 # AR power spectrum
@@ -145,6 +144,24 @@ def ARSpectrum(a, g, nSpec=256, twiddle=None):
         sm = np.dot(a,twiddle[i])
         spec[i] = g / abs(1 - sm)**2
     return spec
+
+# Alpha values for mel scale at various frequencies
+mel = {
+    8000: 0.31,
+    10000: 0.35,
+    12000: 0.37,
+    16000: 0.42,
+    20000: 0.44,
+    22050: 0.45
+}
+
+# Alpha values for bark scale at various frequencies
+bark = {
+    8000: 0.42,
+    10000: 0.47,
+    12000: 0.50,
+    16000: 0.55
+}
 
 # Bilinear transform
 def BilinearWarpOppenheim(a, alpha=0.0, size=None):
