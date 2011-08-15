@@ -45,6 +45,13 @@ def Energy(a):
         e[r] = linalg.norm(a[r,:])**2
     return e
 
+# Lx norm
+def Norm(a, L):
+    e = np.zeros(a.shape[0])
+    for r in range(a.shape[0]):
+        e[r] = linalg.norm(a[r,:], ord=L)
+    return e
+
 def Periodogram(a):
     psd = np.ndarray(a.shape)
     for r in range(a.shape[0]):
@@ -53,59 +60,56 @@ def Periodogram(a):
     return psd
 
 def Autocorrelation(a):
-    ac = np.zeros(a.shape)
-    for r in range(a.shape[0]):
-        psd = abs(np.fft.fft(a[r, :]))**2
-        dft = np.fft.ifft(psd)
-        ac[r, :] = np.real(dft)
+    if a.ndim > 1:
+        ret = np.ndarray(a.shape)
+        for f in range(a.shape[0]):
+            ret[f] = Autocorrelation(a[f])
+        return ret
+
+    psd = abs(np.fft.fft(a))**2
+    dft = np.fft.ifft(psd)
+    ac = np.real(dft)/a.size
     return ac
 
 def ARMatrix(a, order=10, method='matrix'):
-    coeff = np.zeros((a.shape[0], order))
-    gain = np.ones(a.shape[0])
-    if method == 'matrix':
-        for r in range(a.shape[0]):
-            Y = Frame(a[r,:a.shape[1]-1], size=order, period=1)
-            y = a[r,order:]
-            YY = np.dot(Y.T,Y)
-            Yy = np.dot(Y.T,y)
-            elop = np.dot(linalg.inv(YY), Yy)
+    if a.ndim > 1:
+        ret = np.ndarray((a.shape[0], order))
+        gain = np.ndarray(a.shape[0])
+        for f in range(a.shape[0]):
+            ret[f], gain[f] = ARMatrix(a[f], order, method)
+        return ret, gain
 
-            for i in range(order):
-                coeff[r,i] = elop[order-i-1]
-            gain[r] = (np.dot(y,y) - np.dot(elop,Yy)) / y.size
+    coeff = np.zeros(order)
+    if method == 'matrix':
+        Y = Frame(a[:a.size-1], size=order, period=1)
+        y = a[order:]
+        YY = np.dot(Y.T,Y)
+        Yy = np.dot(Y.T,y)
+        elop = np.dot(linalg.inv(YY), Yy)
+        for i in range(order):
+            coeff[i] = elop[order-i-1]
+        gain = (np.dot(y,y) - np.dot(elop,Yy)) / y.size
     elif method == 'acmatrix':
         ac = Autocorrelation(a)
-        YY = np.zeros((order, order))
-        Yy = np.zeros(order)
-        for r in range(a.shape[0]):
-            for i in range(order):
-                Yy[i] = ac[r,i+1]
-                for j in range(order):
-                    YY[i,j] = ac[r,abs(i-j)]
-            coeff[r,:] = np.dot(linalg.inv(YY), Yy)
-            gain[r] = (ac[r,0] - np.dot(coeff[r,:],Yy)) / a.shape[1]
+        YY = np.ndarray((order, order))
+        Yy = np.ndarray(order)
+        for i in range(order):
+            Yy[i] = ac[i+1] * a.size
+            for j in range(order):
+                YY[i,j] = ac[abs(i-j)] * a.size
+        coeff = np.dot(linalg.inv(YY), Yy)
+        gain = (ac[0] - np.dot(coeff,Yy / a.size))
     else:
         print "Unknown AR method"
         exit(1)
 
     return (coeff, gain)
 
-# Levinson-Durbin recursion to calculate reflection coefficients from
-# autocorrelaton.
-def ARLevinson(ac, order=10):
-    if ac.ndim > 1:
-        ret = np.ndarray((ac.shape[0], order))
-        gain = np.ndarray(ac.shape[0])
-        for f in range(ac.shape[0]):
-            ret[f], gain[f] = ARLevinson(ac[f], order)
-        return ret, gain
-    
+# Raw Levinson-Durbin recursion
+def levinson(ac, order, prior=0.0):
     curr = np.zeros(order)
     prev = np.zeros(order)
-    error = ac[0]
-    if error < 1e-8:
-        print "error: ", error
+    error = ac[0] + prior
     for i in range(order):
         # swap current and previous coefficients
         tmp = curr
@@ -120,10 +124,72 @@ def ARLevinson(ac, order=10):
         error *= 1 - curr[i]**2
         for j in range(i):
             curr[j] = prev[j] - curr[i] * prev[i-j-1]
+    return curr
+
+# Levinson-Durbin recursion to calculate reflection coefficients from
+# autocorrelaton.
+def ARLevinson(ac, order=10):
+    if ac.ndim > 1:
+        ret = np.ndarray((ac.shape[0], order))
+        gain = np.ndarray(ac.shape[0])
+        for f in range(ac.shape[0]):
+            ret[f], gain[f] = ARLevinson(ac[f], order)
+        return ret, gain
+    
+    coef = levinson(ac, order)
 
     # Actually calculates gain squared
-    gain = ac[0] - np.dot(curr, ac[1:order+1])
-    return curr, gain
+    gain = ac[0] - np.dot(coef, ac[1:order+1])
+    return coef, gain
+
+# Ridge regression implementation of AR
+def ARRidge(ac, order=10, ridge=0.0):
+    if ac.ndim > 1:
+        ret = np.ndarray((ac.shape[0], order))
+        gain = np.ndarray(ac.shape[0])
+        for f in range(ac.shape[0]):
+            ret[f], gain[f] = ARRidge(ac[f], order, ridge)
+        return ret, gain
+    
+    coef = levinson(ac, order, ridge*ac[0])
+    gain = ac[0] - np.dot(coef, ac[1:order+1])
+    #coef = levinson(ac, order, ridge*gain)
+    #gain = ac[0] - np.dot(coef, ac[1:order+1])
+    return coef, gain
+
+# Lasso-like implementation of AR
+def ARLasso(ac, order=10, ridge=0.0):
+    if ac.ndim > 1:
+        ret = np.ndarray((ac.shape[0], order))
+        gain = np.ndarray(ac.shape[0])
+        for f in range(ac.shape[0]):
+            ret[f], gain[f] = ARLasso(ac[f], order, ridge)
+        return ret, gain
+    
+    # Convert ac into matrices
+    YY = np.ndarray((order, order))
+    Yy = np.ndarray(order)
+    for i in range(order):
+        Yy[i] = ac[i+1] * ac.size
+        for j in range(order):
+            YY[i,j] = ac[abs(i-j)] * ac.size
+
+    # Initialise lasso with ridge
+    gain = ac[0]
+    A = np.zeros((order, order))
+    for i in range(order):
+        A[i,i] = ridge*ac[0]*ac.size
+    coef = np.dot(linalg.inv(YY+A), Yy)
+
+    for i in range(10):
+        for j in range(order):
+            A[j,j] = np.sqrt(abs(coef[j]))
+        gain = ac[0] + np.dot(coef, (np.dot(YY, coef) - 2*Yy)) / ac.size
+        B = np.identity(order) * gain
+        X = linalg.inv(np.dot(A, np.dot(YY, A)) + ridge*B)
+        coef = np.dot(np.dot(A, np.dot(X, A)), Yy)
+
+    return coef, gain
 
 # AR power spectrum
 def ARSpectrum(a, g, nSpec=256, twiddle=None):
