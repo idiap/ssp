@@ -211,6 +211,28 @@ def ARSpectrum(a, g, nSpec=256, twiddle=None):
         spec[i] = g / abs(1 - sm)**2
     return spec
 
+# AR cepstrum
+def ARCepstrum(a, nCep=12):
+    if a.ndim > 1:
+        ret = np.ndarray((a.shape[0], nCep))
+        for f in range(a.shape[0]):
+            ret[f] = ARCepstrum(a[f], nCep)
+        return ret
+
+    cep = np.ndarray(nCep)
+    for i in range(nCep):
+        sum = 0
+        for k in range(i):
+            index = i-k-1
+            if (index < a.size):
+                sum += a[index] * cep(k) * (k+1)
+        cep[i] = sum / (i+1)
+        if (i < a.size):
+            cep[i] += a[i]
+
+    return cep
+
+
 # Alpha values for mel scale at various frequencies
 mel = {
     8000: 0.31,
@@ -296,3 +318,42 @@ def BilinearWarpMatrix(n, alpha=0.0, size=None):
             a[i,j] = a[i-1,j-1] + alpha * (a[i,j-1] - a[i-1,j])
 
     return a
+
+# HTK parameter kinds
+parmKind = {
+    "LPC":       1,
+    "LPCEPSTRA": 3,
+    "MFCC":      6,
+    "FBANK":     7,
+    "MELSPEC":   8,
+    "USER":      9,
+    "PLP":      11,
+    "E":   0000100,
+    "N":   0000200,
+    "D":   0000400,
+    "A":   0001000,
+    "Z":   0004000,
+    "0":   0020000,
+    "T":   0100000
+}
+
+# Sink to HTK file
+from struct import pack
+import array
+def HTKSink(fileName, a, period=0.01, kind="USER"):
+    if (a.ndim != 2):
+        print "Dimension must be 2"
+        exit(1)
+
+    htkKind = 0
+    for k in kind.split('_'):
+        htkKind |= parmKind[k]
+    htkPeriod = period * 1e7 + 0.5
+    header = pack('>iihh', a.shape[0], htkPeriod, a.shape[1]*4, htkKind)
+
+    # Need to convert ndarray to array to write as 4 byte.  You'd
+    # think ndarray.tofile would do that, but it just casts to double.
+    with open(fileName, 'wb') as f:
+        f.write(header)
+        v = np.array(a, dtype='f').byteswap()
+        v.tofile(f)

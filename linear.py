@@ -7,10 +7,21 @@
 # Author(s):
 #   Phil Garner
 #
-import argparse
-ap = argparse.ArgumentParser('Autoregressive modelling')
-ap.add_argument('file')
-arg = ap.parse_args()
+
+# Python 3:
+#import argparse
+#ap = argparse.ArgumentParser('Autoregressive modelling')
+#ap.add_argument('file')
+#arg = ap.parse_args()
+
+# Python 2:
+from optparse import OptionParser
+op = OptionParser()
+(option, arg) = op.parse_args()
+if (len(arg) < 1):
+    print "Need one arg"
+    exit(1)
+file = arg[0]
 
 import time
 
@@ -31,8 +42,8 @@ import matplotlib.pyplot as plt
 lap("plt")
 
 # Load and process
-print "Using file:", arg.file
-r, a = WavSource(arg.file)
+print "Using file:", file
+r, a = WavSource(file)
 print "rate:", r, "size:", a.size
 a = ZeroFilter(a)
 f = Frame(a, size=256, period=128)
