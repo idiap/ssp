@@ -212,24 +212,24 @@ def ARSpectrum(a, g, nSpec=256, twiddle=None):
     return spec
 
 # AR cepstrum
-def ARCepstrum(a, nCep=12):
+def ARCepstrum(a, g, nCep=12):
     if a.ndim > 1:
-        ret = np.ndarray((a.shape[0], nCep))
+        ret = np.ndarray((a.shape[0], nCep+1))
         for f in range(a.shape[0]):
-            ret[f] = ARCepstrum(a[f], nCep)
+            ret[f] = ARCepstrum(a[f], g[f], nCep)
         return ret
 
-    cep = np.ndarray(nCep)
+    cep = np.ndarray(nCep+1)
     for i in range(nCep):
         sum = 0
         for k in range(i):
             index = i-k-1
             if (index < a.size):
-                sum += a[index] * cep(k) * (k+1)
+                sum += a[index] * cep[k] * (k+1)
         cep[i] = sum / (i+1)
         if (i < a.size):
             cep[i] += a[i]
-
+    cep[nCep] = np.log(max(g, 1e-8))
     return cep
 
 
