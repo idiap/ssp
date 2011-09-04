@@ -34,6 +34,6 @@ for pair in pairs:
     f = Frame(a, size=256, period=80)
     a = Autocorrelation(f)
     a, g = ARLevinson(a, order=10)
-    a, g = ARBilinearWarp(a, g, 0.31)
+    a, g = ARBilinearWarp(a, g, alpha=mel[r])
     a = ARCepstrum(a, g)
     HTKSink(saveFile, a, 0.01, "USER")
