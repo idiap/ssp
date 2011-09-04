@@ -339,6 +339,8 @@ parmKind = {
 
 # Sink to HTK file
 from struct import pack
+from os import makedirs
+from os.path import dirname, exists
 import array
 def HTKSink(fileName, a, period=0.01, kind="USER"):
     if (a.ndim != 2):
@@ -353,6 +355,9 @@ def HTKSink(fileName, a, period=0.01, kind="USER"):
 
     # Need to convert ndarray to array to write as 4 byte.  You'd
     # think ndarray.tofile would do that, but it just casts to double.
+    dir = dirname(fileName)
+    if not exists(dir):
+        makedirs(dir)
     with open(fileName, 'wb') as f:
         f.write(header)
         v = np.array(a, dtype='f').byteswap()
