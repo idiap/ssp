@@ -54,7 +54,7 @@ e = Energy(f)
 p = Periodogram(f)
 lap("Periodogram")
 
-order = 14
+order = 10
 if 1:
     a = Autocorrelation(f)
     a, g = ARLevinson(a, order)
@@ -66,14 +66,25 @@ else:
 ls = ARSpectrum(a, g, nSpec=128)
 lap("Spectrum")
 
-if 0:
+t = 'acwarp'
+if t == 'arwarp':
     wa, wg = ARBilinearWarp(a, g, alpha=mel[r])
-    lap("Warp")
-else:
+    lap("AR Warp")
+elif t == 'acwarp':
     ac = Autocorrelation(f)
-    #wa, wg = ARRidge(ac, order, ridge=0.1)
-    wa, wg = ARLasso(ac, order, ridge=10)
+    ac = AutocorrelationBilinearWarp(ac, alpha=mel[r], size=order+1)
+    wa, wg = ARLevinson(ac, order)
+#    wa, wg = ARRidge(ac, order, ridge=0.1)
+#    wa, wg = ARLasso(ac, order, ridge=10)
+    lap("AC Warp")
+elif t == 'ridge':
+    ac = Autocorrelation(f)
+    wa, wg = ARRidge(ac, order, ridge=0.1)
     lap("Ridge")
+elif t == 'lasso':
+    ac = Autocorrelation(f)
+    wa, wg = ARLasso(ac, order, ridge=10)
+    lap("Lasso")
 ws = ARSpectrum(wa, wg, nSpec=128)
 lap("Spectrum")
 
@@ -89,13 +100,14 @@ larPlot = fig.add_subplot(3,2,4)
 warSpec = fig.add_subplot(3,2,5)
 warPlot = fig.add_subplot(3,2,6)
 
-pdfSpec.imshow(np.rot90(np.log10(p[:,:p.shape[1]/2+1])), aspect='auto')
+pdfSpec.imshow(np.transpose(np.log10(p[:,:p.shape[1]/2+1])), origin='lower', aspect='auto')
 pdfPlot.plot(np.log10(e/f.shape[1]))
 pdfPlot.plot(np.log10(g))
-larSpec.imshow(np.rot90(np.log10(ls)), aspect='auto')
+pdfPlot.plot(np.log10(wg))
+larSpec.imshow(np.transpose(np.log10(ls)), origin='lower', aspect='auto')
 larPlot.plot(Norm(a, 1))
 larPlot.plot(Norm(wa, 1))
-warSpec.imshow(np.rot90(np.log10(ws)), aspect='auto')
+warSpec.imshow(np.transpose(np.log10(ws)), origin='lower', aspect='auto')
 
 warPlot.plot(np.log10(p[frame,:p.shape[1]/2+1]/f.shape[1]))
 warPlot.plot(np.log10(ls[frame]), label="Linear")

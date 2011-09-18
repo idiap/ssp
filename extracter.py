@@ -8,6 +8,7 @@
 #   Phil Garner, August 2011
 #
 from ssp import *
+import numpy as np
 
 # Options
 from optparse import OptionParser
@@ -26,14 +27,29 @@ else:
         exit(1)
     pairs = [ ' '.join(arg) ]
 
+order = 10
+
 for pair in pairs:
     loadFile, saveFile = pair.strip().split()
 
     r, a = WavSource(loadFile)
     a = ZeroFilter(a)
     f = Frame(a, size=256, period=80)
-    a = Autocorrelation(f)
-    a, g = ARLevinson(a, order=10)
-    a, g = ARBilinearWarp(a, g, alpha=mel[r])
+    if 0:
+        a = Autocorrelation(f)
+    else:
+        a = Periodogram(f)
+        n = Noise(a)
+        a = SNRSpectrum(a, n * 0.1)
+        a = Autocorrelation(a, input='psd')
+    a = AutocorrelationBilinearWarp(a, alpha=mel[r], size=order+1)
+    a, g = ARLevinson(a, order)
+#    a, g = ARLasso(a, order, ridge=10)
+#    a, g = ARBilinearWarp(a, g, alpha=0.1)
+#    a, g = ARBilinearWarp(a, g, alpha=mel[r])
     a = ARCepstrum(a, g)
+    m = Mean(a)
+    a = Subtract(a, m)
+    m = StdDev(a)
+    a = Divide(a, m)
     HTKSink(saveFile, a, 0.01, "USER")

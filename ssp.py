@@ -53,20 +53,30 @@ def Norm(a, L):
     return e
 
 def Periodogram(a):
-    psd = np.ndarray(a.shape)
-    for r in range(a.shape[0]):
-        dft = np.fft.fft(a[r, :])
-        psd[r, :] = np.abs(dft)**2
-    return psd
-
-def Autocorrelation(a):
     if a.ndim > 1:
         ret = np.ndarray(a.shape)
         for f in range(a.shape[0]):
-            ret[f] = Autocorrelation(a[f])
+            ret[f] = Periodogram(a[f])
         return ret
 
-    psd = abs(np.fft.fft(a))**2
+    psd = np.abs(np.fft.fft(a))**2
+    return psd
+
+# Autocorrelation
+#
+# Default is assume framed time samples as input, but input=psd
+# indicates periodogram input
+def Autocorrelation(a, input=None):
+    if a.ndim > 1:
+        ret = np.ndarray(a.shape)
+        for f in range(a.shape[0]):
+            ret[f] = Autocorrelation(a[f], input)
+        return ret
+
+    if input == 'psd':
+        psd = a
+    else:
+        psd = abs(np.fft.fft(a))**2
     dft = np.fft.ifft(psd)
     ac = np.real(dft)/a.size
     return ac
@@ -296,10 +306,39 @@ def ARBilinearWarp(a, g, alpha=0, matrix=None):
         return reta, retg
 
     # In the AR case, we need to prepend a 1
-    a = np.dot(m, np.insert(a, 0, 1))
-    g /= a[0]
-    a /= a[0]
-    return a[1:], g
+    wa = np.dot(m, np.insert(a, 0, 1))
+    wg = g / wa[0]
+    wa /= wa[0]
+    return wa[1:], wg
+
+# Bilinear warp of autocorrelation
+def AutocorrelationBilinearWarp(a, alpha=0, size=None, matrix=None):
+
+    # Rows defaults to 
+    if size is None:
+        rows = a.shape[-1]
+    else:
+        rows = size
+
+    # Precompute a warping matrix
+    if matrix is None:
+        m = BilinearWarpMatrix(a.shape[-1], alpha, rows)
+    else:
+        m = matrix
+
+    if a.ndim > 1:
+        s = list(a.shape)
+        s[-1] = rows
+        reta = np.ndarray(s)
+        for f in range(a.shape[0]):
+            reta[f] = AutocorrelationBilinearWarp(a[f], alpha, rows, m)
+        return reta
+
+    # So, here is a single autocorrelation
+    a[0] /= 2
+    wa = np.dot(m, a)
+    wa[0] *= 2
+    return wa
 
 # Oppenheim's recursion expressed as a matrix.
 def BilinearWarpMatrix(n, alpha=0.0, size=None):
@@ -322,6 +361,7 @@ def BilinearWarpMatrix(n, alpha=0.0, size=None):
 # HTK parameter kinds
 parmKind = {
     "LPC":       1,
+    "LPREFC":    2,
     "LPCEPSTRA": 3,
     "MFCC":      6,
     "FBANK":     7,
@@ -362,3 +402,66 @@ def HTKSink(fileName, a, period=0.01, kind="USER"):
         f.write(header)
         v = np.array(a, dtype='f').byteswap()
         v.tofile(f)
+
+# Calculate mean; typically cepstral, but it doesn't matter here
+def Mean(a):
+    # Not quite sure of the meaning for non-2d
+    if (a.ndim != 2):
+        print "Dimension must be 2"
+        exit(1)
+
+    return np.mean(a, axis=0)
+
+# Subtract a vector; typically cepstral mean...
+def Subtract(a, m):
+    if a.ndim > m.ndim:
+        ret = np.ndarray(a.shape)
+        for f in range(a.shape[0]):
+            ret[f] = Subtract(a[f], m)
+        return ret
+
+    return a-m
+
+# Calculate variance; typically cepstral, but it doesn't matter here
+def StdDev(a):
+    # Not quite sure of the meaning for non-2d
+    if (a.ndim != 2):
+        print "Dimension must be 2"
+        exit(1)
+
+    return np.std(a, axis=0)
+
+# Divide
+def Divide(a, m):
+    if a.ndim > m.ndim:
+        ret = np.ndarray(a.shape)
+        for f in range(a.shape[0]):
+            ret[f] = Divide(a[f], m)
+        return ret
+
+    return a/m
+
+# Noise estimate; half at one end, half at the other
+def Noise(a, frames=10):
+    if a.ndim != 2:
+        print "Dimension must be 2"
+        exit(1)
+
+    f = frames / 2
+    sum1 = np.sum(a[:f,:], axis=0)
+    sum2 = np.sum(a[-f:,:], axis=0)
+    return (sum1 + sum2) / frames
+
+# SNR spectrum
+def SNRSpectrum(a, n):
+    if a.ndim > 1:
+        ret = np.ndarray(a.shape)
+        for f in range(a.shape[0]):
+            ret[f] = SNRSpectrum(a[f], n)
+        return ret
+
+    x = np.ndarray((2, n.size))
+    x[0] = a/n
+    x[1] = np.ones(n.size)
+    return x.max(axis=0)
+

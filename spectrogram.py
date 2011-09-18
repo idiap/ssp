@@ -12,17 +12,23 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Load and process
-file = "FAC_13A.wav"
+file = "FAC_369O5A.wav"
 r, a = WavSource(file)
 a = ZeroFilter(a)
-f = Frame(a, size=256, period=128)
-if False:
+f = Frame(a, size=256, period=80)
+type = 'ar'
+if type == 'psd':
     p = Periodogram(f)
     p = p[:,:p.shape[1]/2+1]
-else:
+elif type == 'ar':
     a = Autocorrelation(f)
     a, g = ARLevinson(a, 10)
     p = ARSpectrum(a, g, nSpec=64)
+elif type == 'snr':
+    p = Periodogram(f)
+    n = Noise(p)
+    p = SNRSpectrum(p, n)
+    p = p[:,:p.shape[1]/2+1]    
 
 # Draw it
 plt.bone()
