@@ -465,3 +465,7 @@ def SNRSpectrum(a, n):
     x[1] = np.ones(n.size)
     return x.max(axis=0)
 
+# Window
+# It's trvial, but helps the program look good
+def Window(a, w):
+    return a*w
