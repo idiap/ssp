@@ -469,3 +469,24 @@ def SNRSpectrum(a, n):
 # It's trvial, but helps the program look good
 def Window(a, w):
     return a*w
+
+# General raised cosine window
+def raisedCosine(n, a):
+    w = np.zeros(n)
+    for i in range(n):
+        m = -1
+        for j in range(len(a)):
+            m *= -1
+            w[i] += m * a[j] * np.cos(2 * np.pi * i * j / (n-1))
+    return w
+
+# Some particular raised cosine windows
+# http://en.wikipedia.org/wiki/Window_function
+def nuttall(n):
+    return raisedCosine(n, (0.355768, 0.487396, 0.144232, 0.012604))
+
+def blackmanharris(n):
+    return raisedCosine(n, (0.35875, 0.48829, 0.14128, 0.01168))
+
+def blackmannuttall(n):
+    return raisedCosine(n, (0.3635819, 0.4891775, 0.1365995, 0.0106411))
