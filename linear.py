@@ -47,6 +47,7 @@ r, a = WavSource(file)
 print "rate:", r, "size:", a.size
 a = ZeroFilter(a)
 f = Frame(a, size=256, period=128)
+f = Window(f, np.hanning(256))
 print "frame: ", f.shape[0], "x ", f.shape[1]
 lap("Frame")
 
@@ -66,7 +67,7 @@ else:
 ls = ARSpectrum(a, g, nSpec=128)
 lap("Spectrum")
 
-t = 'acwarp'
+t = 'arwarp'
 if t == 'arwarp':
     wa, wg = ARBilinearWarp(a, g, alpha=mel[r])
     lap("AR Warp")
