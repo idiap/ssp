@@ -188,7 +188,8 @@ def ARLasso(ac, order=10, ridge=0.0):
     gain = ac[0]
     A = np.zeros((order, order))
     for i in range(order):
-        A[i,i] = ridge*ac[0]*ac.size
+        #A[i,i] = ridge*ac[0]*ac.size
+        A[i,i] = 0.01*ac[0]
     coef = np.dot(linalg.inv(YY+A), Yy)
 
     for i in range(10):
@@ -242,6 +243,22 @@ def ARCepstrum(a, g, nCep=12):
     cep[nCep] = np.log(max(g, 1e-8))
     return cep
 
+# AR excitation filter
+def ARExcitation(a, ar):
+    if a.ndim > 1:
+        ret = np.ndarray(a.shape)
+        for f in range(a.shape[0]):
+            ret[f] = ARExcitation(a[f], ar[f])
+        return ret
+
+    c = np.append(-ar[::-1], 1)
+    r = np.ndarray(len(a))
+    for i in range(len(a)):
+        if i < len(c):
+            r[i] = np.dot(a[:i+1], c[-i-1:])
+        else:
+            r[i] = np.dot(a[i-len(c)+1:i+1], c)
+    return r
 
 # Alpha values for mel scale at various frequencies
 mel = {
@@ -306,10 +323,10 @@ def ARBilinearWarp(a, g, alpha=0, matrix=None):
         return reta, retg
 
     # In the AR case, we need to prepend a 1
-    wa = np.dot(m, np.insert(a, 0, 1))
+    wa = np.dot(m, np.insert(-a, 0, 1))
     wg = g / wa[0]
     wa /= wa[0]
-    return wa[1:], wg
+    return -wa[1:], wg
 
 # Bilinear warp of autocorrelation
 def AutocorrelationBilinearWarp(a, alpha=0, size=None, matrix=None):
@@ -490,3 +507,18 @@ def blackmanharris(n):
 
 def blackmannuttall(n):
     return raisedCosine(n, (0.3635819, 0.4891775, 0.1365995, 0.0106411))
+
+
+import matplotlib.pyplot as plt
+def zplot(fig, a):
+    ax = fig.add_axes([0.1, 0.1, 0.8, 0.8], polar=True)
+    arg = np.angle(a)
+    mag = np.abs(a)
+    ax.plot(arg, mag, 'r+')
+    ax.set_rmax(1.0)
+
+def specplot(ax, a, r):
+    ax.imshow(np.transpose(np.log10(a)),
+              origin='lower', aspect='auto', cmap='bone')
+    ax.set_yticks((0,a.shape[-1]-1))
+    ax.set_yticklabels(('0', r/2))
