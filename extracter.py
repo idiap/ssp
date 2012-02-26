@@ -35,7 +35,8 @@ for pair in pairs:
     r, a = WavSource(loadFile)
     a = ZeroFilter(a)
     f = Frame(a, size=256, period=80)
-    if 0:
+    f = Window(f, nuttall(256))
+    if 1:
         a = Autocorrelation(f)
     else:
         a = Periodogram(f)
