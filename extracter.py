@@ -27,15 +27,25 @@ else:
         exit(1)
     pairs = [ ' '.join(arg) ]
 
-order = 10
-
 for pair in pairs:
     loadFile, saveFile = pair.strip().split()
 
+    print "wav: ", loadFile
     r, a = WavSource(loadFile)
+
+    # Defaults for 8 kHz
+    frameSize = 256
+    framePeriod = 80
+    lpOrder = 10
+
+    if r == 16000:
+        frameSize = 400
+        framePeriod = 160
+        lpOrder = 12
+        
     a = ZeroFilter(a)
-    f = Frame(a, size=256, period=80)
-    f = Window(f, nuttall(256))
+    f = Frame(a, size=frameSize, period=framePeriod)
+    f = Window(f, nuttall(frameSize))
     if 1:
         a = Autocorrelation(f)
     else:
@@ -43,14 +53,16 @@ for pair in pairs:
         n = Noise(a)
         a = SNRSpectrum(a, n * 0.1)
         a = Autocorrelation(a, input='psd')
-    a = AutocorrelationBilinearWarp(a, alpha=mel[r], size=order+1)
-    a, g = ARLevinson(a, order)
-#    a, g = ARLasso(a, order, ridge=10)
+    a = AutocorrelationBilinearWarp(a, alpha=mel[r], size=lpOrder+1)
+    a, g = ARLevinson(a, lpOrder)
+#    a, g = ARLasso(a, lpOrder, ridge=10)
 #    a, g = ARBilinearWarp(a, g, alpha=0.1)
 #    a, g = ARBilinearWarp(a, g, alpha=mel[r])
     a = ARCepstrum(a, g)
     m = Mean(a)
     a = Subtract(a, m)
-    m = StdDev(a)
-    a = Divide(a, m)
+#    m = StdDev(a)
+#    a = Divide(a, m)
+
+    print "htk: ", saveFile
     HTKSink(saveFile, a, 0.01, "USER")
