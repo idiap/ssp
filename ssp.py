@@ -19,6 +19,13 @@ def WavSource(file):
         audio /= 32768
     return rate, audio
 
+# Save a .wav file
+def WavSink(a, file, rate):
+    audio = a * 32768
+    audio = np.cast['int16'](audio)
+    wavfile.write(file, rate, audio)
+    return a
+
 # Filter comprising a single zero
 def ZeroFilter(a, zero=0.97):
     filter = np.zeros(a.size)
@@ -29,6 +36,7 @@ def ZeroFilter(a, zero=0.97):
     return filter
 
 # Convert array to framed array
+# The opposite of this is a.flatten
 def Frame(a, size=512, period=256):
     nFrames = (a.size - (size-period)) // period
     frame = np.zeros((nFrames, size))
@@ -81,6 +89,9 @@ def Autocorrelation(a, input=None):
     ac = np.real(dft)/a.size
     return ac
 
+#
+# All of the methods below actually calculate gain squared
+#
 def ARMatrix(a, order=10, method='matrix'):
     if a.ndim > 1:
         ret = np.ndarray((a.shape[0], order))
@@ -147,8 +158,6 @@ def ARLevinson(ac, order=10):
         return ret, gain
     
     coef = levinson(ac, order)
-
-    # Actually calculates gain squared
     gain = ac[0] - np.dot(coef, ac[1:order+1])
     return coef, gain
 
@@ -163,8 +172,6 @@ def ARRidge(ac, order=10, ridge=0.0):
     
     coef = levinson(ac, order, ridge*ac[0])
     gain = ac[0] - np.dot(coef, ac[1:order+1])
-    #coef = levinson(ac, order, ridge*gain)
-    #gain = ac[0] - np.dot(coef, ac[1:order+1])
     return coef, gain
 
 # Lasso-like implementation of AR
@@ -244,21 +251,43 @@ def ARCepstrum(a, g, nCep=12):
     return cep
 
 # AR excitation filter
-def ARExcitation(a, ar):
+def ARExcitation(a, ar, g):
     if a.ndim > 1:
         ret = np.ndarray(a.shape)
         for f in range(a.shape[0]):
-            ret[f] = ARExcitation(a[f], ar[f])
+            ret[f] = ARExcitation(a[f], ar[f], g[f])
         return ret
 
     c = np.append(-ar[::-1], 1)
     r = np.ndarray(len(a))
     for i in range(len(a)):
         if i < len(c):
-            r[i] = np.dot(a[:i+1], c[-i-1:])
+            r[i] = np.dot(a[:i+1], c[-i-1:]) / np.sqrt(g)
         else:
-            r[i] = np.dot(a[i-len(c)+1:i+1], c)
+            r[i] = np.dot(a[i-len(c)+1:i+1], c) / np.sqrt(g)
     return r
+
+# AR resynthesis filter
+def ARResynthesis(e, ar, g):
+    if e.ndim > 1:
+        ret = np.ndarray(e.shape)
+        for f in range(e.shape[0]):
+            ret[f] = ARResynthesis(e[f], ar[f], g[f])
+        return ret
+
+    c = ar[::-1]
+    r = np.ndarray(len(e))
+    g = np.sqrt(g)
+    r[0] = e[0]*g
+    print g
+    print r[0]
+    for i in range(1,len(e)):
+        if i < len(c):
+            r[i] = e[i]*g + np.dot(r[:i], c[-i:])
+        else:
+            r[i] = e[i]*g + np.dot(r[i-len(c):i], c)
+    return r
+
 
 # Alpha values for mel scale at various frequencies
 mel = {
@@ -413,7 +442,7 @@ def HTKSink(fileName, a, period=0.01, kind="USER"):
     # Need to convert ndarray to array to write as 4 byte.  You'd
     # think ndarray.tofile would do that, but it just casts to double.
     dir = dirname(fileName)
-    if not exists(dir):
+    if dir and not exists(dir):
         makedirs(dir)
     with open(fileName, 'wb') as f:
         f.write(header)
@@ -483,7 +512,7 @@ def SNRSpectrum(a, n):
     return x.max(axis=0)
 
 # Window
-# It's trvial, but helps the program look good
+# It's trivial, but helps the program look good
 def Window(a, w):
     return a*w
 
