@@ -100,7 +100,10 @@ def ARMatrix(a, order=10, method='matrix'):
             ret[f], gain[f] = ARMatrix(a[f], order, method)
         return ret, gain
 
-    coeff = np.zeros(order)
+    coef = np.zeros(order)
+
+    # Follow the matrix based method to the letter.  elop contains the
+    # poles reversed, coef is the poles in order.
     if method == 'matrix':
         Y = Frame(a[:a.size-1], size=order, period=1)
         y = a[order:]
@@ -108,8 +111,11 @@ def ARMatrix(a, order=10, method='matrix'):
         Yy = np.dot(Y.T,y)
         elop = np.dot(linalg.inv(YY), Yy)
         for i in range(order):
-            coeff[i] = elop[order-i-1]
+            coef[i] = elop[order-i-1]
         gain = (np.dot(y,y) - np.dot(elop,Yy)) / y.size
+
+    # Use the autocorrelation to populate the matrices.  Here, Yy runs
+    # in ascending index, so we get coef in order right away.
     elif method == 'acmatrix':
         ac = Autocorrelation(a)
         YY = np.ndarray((order, order))
@@ -118,13 +124,13 @@ def ARMatrix(a, order=10, method='matrix'):
             Yy[i] = ac[i+1] * a.size
             for j in range(order):
                 YY[i,j] = ac[abs(i-j)] * a.size
-        coeff = np.dot(linalg.inv(YY), Yy)
-        gain = (ac[0] - np.dot(coeff,Yy / a.size))
+        coef = np.dot(linalg.inv(YY), Yy)
+        gain = (ac[0] - np.dot(coef,Yy / a.size))
     else:
         print "Unknown AR method"
         exit(1)
 
-    return (coeff, gain)
+    return (coef, gain)
 
 # Raw Levinson-Durbin recursion
 def levinson(ac, order, prior=0.0):
@@ -161,6 +167,16 @@ def ARLevinson(ac, order=10):
     gain = ac[0] - np.dot(coef, ac[1:order+1])
     return coef, gain
 
+# Convert ac into matrices
+def ACToMatrix(ac, order):
+    YY = np.ndarray((order, order))
+    Yy = np.ndarray(order)
+    for i in range(order):
+        Yy[i] = ac[i+1] * ac.size
+        for j in range(order):
+            YY[i,j] = ac[abs(i-j)] * ac.size
+    return YY, Yy
+
 # Ridge regression implementation of AR
 def ARRidge(ac, order=10, ridge=0.0):
     if ac.ndim > 1:
@@ -171,7 +187,8 @@ def ARRidge(ac, order=10, ridge=0.0):
         return ret, gain
     
     coef = levinson(ac, order, ridge*ac[0])
-    gain = ac[0] - np.dot(coef, ac[1:order+1])
+    YY, Yy = ACToMatrix(ac, order)
+    gain = ac[0] + np.dot(coef, (np.dot(YY, coef) - 2*Yy)) / ac.size
     return coef, gain
 
 # Lasso-like implementation of AR
@@ -184,12 +201,7 @@ def ARLasso(ac, order=10, ridge=0.0):
         return ret, gain
     
     # Convert ac into matrices
-    YY = np.ndarray((order, order))
-    Yy = np.ndarray(order)
-    for i in range(order):
-        Yy[i] = ac[i+1] * ac.size
-        for j in range(order):
-            YY[i,j] = ac[abs(i-j)] * ac.size
+    YY, Yy = ACToMatrix(ac, order)
 
     # Initialise lasso with ridge
     gain = ac[0]
@@ -279,14 +291,37 @@ def ARResynthesis(e, ar, g):
     r = np.ndarray(len(e))
     g = np.sqrt(g)
     r[0] = e[0]*g
-    print g
-    print r[0]
     for i in range(1,len(e)):
         if i < len(c):
             r[i] = e[i]*g + np.dot(r[:i], c[-i:])
         else:
             r[i] = e[i]*g + np.dot(r[i-len(c):i], c)
     return r
+
+# Sparse AR analysis
+def ARSparse(a, order=10):
+    if a.ndim > 1:
+        ret = np.ndarray((a.shape[0], order))
+        gain = np.ndarray(a.shape[0])
+        for f in range(a.shape[0]):
+            ret[f], gain[f] = ARSparse(a[f], order)
+        return ret, gain
+
+    # Follow the matrix based method to the letter.  elop contains the
+    # poles reversed, coef is the poles in order.
+    X = np.identity(len(a)-order)
+    for iter in range(4):
+        Y = np.dot(X, Frame(a[:a.size-1], size=order, period=1))
+        y = np.dot(X, a[order:])
+        YY = np.dot(Y.T,Y)
+        Yy = np.dot(Y.T,y)
+        elop = np.dot(linalg.inv(YY), Yy)
+        coef = elop[::-1]
+        gain = (np.dot(y,y) - np.dot(elop,Yy)) / y.size
+        exn = ARExcitation(a, coef, gain)
+        X = np.diag(1 / np.sqrt(np.abs(exn[order:])))
+
+    return (coef, gain)
 
 
 # Alpha values for mel scale at various frequencies
