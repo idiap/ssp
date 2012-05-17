@@ -218,6 +218,8 @@ def ARLasso(ac, order=10, ridge=0.0):
         B = np.identity(order) * gain
         X = linalg.inv(np.dot(A, np.dot(YY, A)) + ridge*B)
         coef = np.dot(np.dot(A, np.dot(X, A)), Yy)
+        # Each iteration should reduce the L1 norm of coef
+        #print i, linalg.norm(coef, ord=1)
 
     return coef, gain
 
@@ -309,17 +311,24 @@ def ARSparse(a, order=10):
 
     # Follow the matrix based method to the letter.  elop contains the
     # poles reversed, coef is the poles in order.
+    # Initialise with ML
+    gamma = 1
     X = np.identity(len(a)-order)
-    for iter in range(4):
+    for iter in range(5):
         Y = np.dot(X, Frame(a[:a.size-1], size=order, period=1))
         y = np.dot(X, a[order:])
         YY = np.dot(Y.T,Y)
         Yy = np.dot(Y.T,y)
         elop = np.dot(linalg.inv(YY), Yy)
         coef = elop[::-1]
-        gain = (np.dot(y,y) - np.dot(elop,Yy)) / y.size
+        gain = gamma * (np.dot(y,y) - np.dot(elop,Yy)) / y.size
         exn = ARExcitation(a, coef, gain)
-        X = np.diag(1 / np.sqrt(np.abs(exn[order:])))
+        #print iter, linalg.norm(exn[order:], ord=1)
+        for i in range(len(exn)):
+            exn[i] = max(abs(exn[i]),1e-6)
+        X = np.diag(1 / np.sqrt(exn[order:]))
+        #gamma = np.sqrt(2)
+        gamma = 2
 
     return (coef, gain)
 
