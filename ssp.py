@@ -11,6 +11,22 @@ import numpy as np
 import numpy.linalg as linalg
 from scipy.io import wavfile
 
+# Parameters!
+# Get an environment variable
+from os import environ
+def Parameter(param, default=None):
+    if param in environ:
+        # Try to cast it to a numeric type
+        for caster in (int, float):
+            try:
+                return caster(environ[param])
+            except ValueError:
+                pass
+        return environ[param]
+    else:
+        # Otherwise it's a string
+        return default
+
 # Load a .wav file
 def WavSource(file):
     rate, audio = wavfile.read(file)
@@ -331,6 +347,42 @@ def ARSparse(a, order=10):
         gamma = 2
 
     return (coef, gain)
+
+
+def ARLogLikelihoodRatio(a, order=10):
+    if a.ndim > 1:
+        ret = np.ndarray(a.shape[0])
+        for f in range(a.shape[0]):
+            ret[f] = ARLogLikelihoodRatio(a[f], order)
+        return ret
+
+    # Usual Gaussian 
+    ac = Autocorrelation(a)
+    coef, gain = ARLevinson(ac, order)
+    exn = ARExcitation(a, coef, gain)
+    llGauss = - len(exn)/2 * np.log(2*np.pi) - 0.5 * np.dot(exn, exn)
+
+    # Unusual Laplacian
+    gamma = 1
+    X = np.identity(len(a)-order)
+    for iter in range(5):
+        Y = np.dot(X, Frame(a[:a.size-1], size=order, period=1))
+        y = np.dot(X, a[order:])
+        YY = np.dot(Y.T,Y)
+        Yy = np.dot(Y.T,y)
+        elop = np.dot(linalg.inv(YY), Yy)
+        coef = elop[::-1]
+        gain = gamma * (np.dot(y,y) - np.dot(elop,Yy)) / y.size
+        exn = ARExcitation(a, coef, gain)
+        for i in range(len(exn)):
+            exn[i] = max(abs(exn[i]),1e-6)
+        X = np.diag(1 / np.sqrt(exn[order:]))
+        gamma = 2
+
+    exn = ARExcitation(a, coef, gain)
+    llLaplace = -gamma * np.sum(np.abs(exn))
+    
+    return llLaplace - np.logaddexp(llLaplace, llGauss)
 
 
 # Alpha values for mel scale at various frequencies
