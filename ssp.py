@@ -348,6 +348,45 @@ def ARSparse(a, order=10):
 
     return (coef, gain)
 
+# Solve polynomial corresponding to AR solution
+def ARPoly(a):
+    if a.ndim > 1:
+        ret = np.ndarray(a.shape, dtype='complex')
+        for f in range(a.shape[0]):
+            ret[f] = ARPoly(a[f])
+        return ret
+
+    # The refection coeffs are negative, so insert -1 and assume that
+    # the whole thing can be multiplied by -1
+    r = np.roots(np.insert(a, 0, -1))
+    return r
+
+# Tries to find the angle correesponding to the fundamental frequency
+def ARAngle(a):
+    if a.ndim > 1:
+        ret_m = np.ndarray(a.shape)
+        ret_s = np.ndarray(a.shape)
+        for f in range(a.shape[0]):
+            ret_m[f], ret_s[f] = Angle(a[f])
+        return ret_m, ret_s
+
+    # First extract the angles of large poles above the real line
+    t = np.zeros(len(a))
+    j = 0
+    for i in range(len(a)):
+        if np.abs(a[i]) > 0.85 and np.imag(a[i]) > 0:
+            t[j] = np.angle(a[i])
+            j += 1
+
+    # Build an array of the differences between the sorted angles
+    t = np.sort(t[:j])
+    for i in range(1,j):
+        t[i-1] = t[i] - t[i-1]
+
+    # We need the mean and stddev of those differences
+    m = np.mean(t[:j-1])
+    s = np.std(t[:j-1])
+    return m, s
 
 def ARLogLikelihoodRatio(a, order=10):
     if a.ndim > 1:

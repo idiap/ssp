@@ -67,7 +67,7 @@ else:
 ls = ARSpectrum(a, g, nSpec=128)
 lap("Spectrum")
 
-t = 'arwarp'
+t = 'lasso'
 if t == 'arwarp':
     wa, wg = ARBilinearWarp(a, g, alpha=mel[r])
     lap("AR Warp")
@@ -80,18 +80,18 @@ elif t == 'acwarp':
     lap("AC Warp")
 elif t == 'ridge':
     ac = Autocorrelation(f)
-    wa, wg = ARRidge(ac, order, ridge=0.1)
+    wa, wg = ARRidge(ac, order, ridge=0.5)
     lap("Ridge")
 elif t == 'lasso':
     ac = Autocorrelation(f)
-    wa, wg = ARLasso(ac, order, ridge=10)
+    wa, wg = ARLasso(ac, order, ridge=30)
     lap("Lasso")
 ws = ARSpectrum(wa, wg, nSpec=128)
 lap("Spectrum")
 
 # Draw it
 # fig.add_subplot(2,1,1) # two rows, one column, first plot
-frame = 85
+frame = 38
 fig = plt.figure()
 plt.bone()
 pdfSpec = fig.add_subplot(3,2,1)

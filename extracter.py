@@ -54,15 +54,17 @@ for pair in pairs:
         a = SNRSpectrum(a, n * 0.1)
         a = Autocorrelation(a, input='psd')
     a = AutocorrelationBilinearWarp(a, alpha=mel[r], size=lpOrder+1)
-    a, g = ARLevinson(a, lpOrder)
-#    a, g = ARLasso(a, lpOrder, ridge=10)
-#    a, g = ARBilinearWarp(a, g, alpha=0.1)
+
+    ridge = Parameter('Ridge', 0.1)
+#    a, g = ARRidge(a, lpOrder, ridge)
+    a, g = ARLasso(a, lpOrder, ridge)
+#    a, g = ARLevinson(a, lpOrder)
 #    a, g = ARBilinearWarp(a, g, alpha=mel[r])
     a = ARCepstrum(a, g)
     m = Mean(a)
     a = Subtract(a, m)
-#    m = StdDev(a)
-#    a = Divide(a, m)
+    m = StdDev(a)
+    a = Divide(a, m)
 
     print "htk: ", saveFile
     HTKSink(saveFile, a, 0.01, "USER")

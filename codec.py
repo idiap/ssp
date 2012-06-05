@@ -39,16 +39,17 @@ for pair in pairs:
     if r == 16000:
         frameSize = 512
         framePeriod = 512
-        lpOrder = 12
+        lpOrder = 18
         
 #    a = ZeroFilter(a)
     f = Frame(a, size=frameSize, period=framePeriod)
     w = Window(f, nuttall(frameSize))
     ac = Autocorrelation(w)
     ar, g = ARLevinson(ac, lpOrder)
-    # e = ARExcitation(f, ar, g)
-    e = np.random.normal(size=f.shape)
+    e = ARExcitation(f, ar, g)
+    # e = np.random.normal(size=f.shape)
 
     s = ARResynthesis(e, ar, g)
     print "wav: ", saveFile
-    WavSink(s.flatten('A'), saveFile, r)
+    e /= np.amax(e)
+    WavSink(e.flatten('A'), saveFile, r)
