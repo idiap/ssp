@@ -34,6 +34,8 @@ p = Periodogram(w)
 
 # Plot
 fig = plt.figure()
+pSpec = fig.add_subplot(4,1,1)
+specplot(pSpec, p[:,:p.shape[1]/2+1], r)
 
 
 method = Parameter('method', 'map')
@@ -51,31 +53,47 @@ if method == 'ar':
     ep = Periodogram(fh)
     a = Autocorrelation(fh)
     a, g = ARLasso(a, order, 500)
-
     l = ARSpectrum(a, g, nSpec=fs/2)
-    c = ARPoly(a)
-    m, s = ARAngle(c)
 
-elif method == 'map':
-    print "not done yet"
-
-
-if 1:
-    pSpec = fig.add_subplot(4,1,1)
     epSpec = fig.add_subplot(4,1,2)
     lSpec = fig.add_subplot(4,1,3)
-    rSpec = fig.add_subplot(4,1,4)
-
-    specplot(pSpec, p[:,:p.shape[1]/2+1], r)
     specplot(epSpec, ep[:,:ep.shape[1]/2+1], r)
     specplot(lSpec, l, r)
 
-    rSpec.set_xlim(0, len(m)-1)
-    rSpec.plot(m / np.pi * r, 'r')
-    rSpec.plot((m+s) / np.pi * r, 'b')
-    rSpec.plot((m-s) / np.pi * r, 'b')
-else:
-    f = Parameter("Frame", 10)
-    zplot(fig, c[f])
+    c = ARPoly(a)
+    m, s = ARAngle(c)
+
+    if 1:
+        rSpec = fig.add_subplot(4,1,4)
+        rSpec.set_xlim(0, len(m)-1)
+        rSpec.plot(m / np.pi * r, 'r')
+        rSpec.plot((m+s) / np.pi * r, 'b')
+        rSpec.plot((m-s) / np.pi * r, 'b')
+    else:
+        f = Parameter("Frame", 10)
+        zplot(fig, c[f])
+
+elif method == 'map':
+    h = Harmonogram(p, 'psd')
+    hSpec = fig.add_subplot(4,1,2)
+    specplot(hSpec, h, r)
+
+    # Low order AR
+    order = 15
+    a = Autocorrelation(w)
+    la, lg = ARLevinson(a, order)
+    e = ARExcitation(f, la, lg)
+
+    eh = Harmonogram(e)
+    ehSpec = fig.add_subplot(4,1,3)
+    specplot(ehSpec, eh, r)
+
+    frame = 68
+    rSpec = fig.add_subplot(4,1,4)
+    rSpec.set_xlim(0, h.shape[1]-1)
+    
+    rSpec.plot(p[frame,:512] / Norm(p[frame,:512], 2), 'c')
+    rSpec.plot(h[frame] / Norm(h[frame], 2), 'r')
+    rSpec.plot(eh[frame] / Norm(eh[frame], 2), 'b')
 
 plt.show()

@@ -70,10 +70,14 @@ def Energy(a):
     return e
 
 # Lx norm
-def Norm(a, L):
-    e = np.zeros(a.shape[0])
-    for r in range(a.shape[0]):
-        e[r] = linalg.norm(a[r,:], ord=L)
+def Norm(a, L=2):
+    if a.ndim > 1:
+        ret = np.ndarray(a.shape[0])
+        for f in range(a.shape[0]):
+            ret[f] = Norm(a[f], L)
+        return ret
+
+    e = linalg.norm(a, ord=L)
     return e
 
 def Periodogram(a):
@@ -85,6 +89,30 @@ def Periodogram(a):
 
     psd = np.abs(np.fft.fft(a))**2
     return psd
+
+def Harmonogram(a, input=None):
+    if a.ndim > 1:
+        d = list(a.shape)
+        d[-1] /= 2
+        ret = np.ndarray(tuple(d))
+        for f in range(a.shape[0]):
+            ret[f] = Harmonogram(a[f], input)
+        return ret
+
+    if input == 'psd':
+        psd = a
+    else:
+        psd = np.abs(np.fft.fft(a))**2
+
+    hg = np.zeros(len(psd)/2)
+    for b in range(1, len(hg)):
+        h = b
+        while h < len(hg):
+            hg[b] += psd[h]
+            h *= 2
+
+    return hg
+
 
 # Autocorrelation
 #
@@ -367,7 +395,7 @@ def ARAngle(a):
         ret_m = np.ndarray(a.shape)
         ret_s = np.ndarray(a.shape)
         for f in range(a.shape[0]):
-            ret_m[f], ret_s[f] = Angle(a[f])
+            ret_m[f], ret_s[f] = ARAngle(a[f])
         return ret_m, ret_s
 
     # First extract the angles of large poles above the real line
