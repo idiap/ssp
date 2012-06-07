@@ -686,3 +686,17 @@ def specplot(ax, a, r):
               origin='lower', aspect='auto', cmap='bone')
     ax.set_yticks((0,a.shape[-1]-1))
     ax.set_yticklabels(('0', r/2))
+
+class Figure:
+    def __init__(self, rows=1, cols=1):
+        self.rows = rows
+        self.cols = cols
+        self.next = 1
+        self.fig = plt.figure()
+
+    def subplot(self):
+        if self.next > self.rows * self.cols:
+            raise OverflowError('Out of plots')
+        axesSubplot = self.fig.add_subplot(self.rows, self.cols, self.next)
+        self.next += 1
+        return axesSubplot

@@ -35,11 +35,9 @@ def lap(func):
   print func, elapsed
 
 from ssp import *
-lap("ssp")
 import numpy as np
-lap("numpy")
 import matplotlib.pyplot as plt
-lap("plt")
+lap("Import")
 
 # Load and process
 print "Using file:", file
@@ -48,7 +46,7 @@ print "rate:", r, "size:", a.size
 a = ZeroFilter(a)
 f = Frame(a, size=256, period=128)
 f = Window(f, np.hanning(256))
-print "frame: ", f.shape[0], "x ", f.shape[1]
+print "frame:", f.shape[0], "x", f.shape[1]
 lap("Frame")
 
 e = Energy(f)
@@ -67,7 +65,7 @@ else:
 ls = ARSpectrum(a, g, nSpec=128)
 lap("Spectrum")
 
-t = 'lasso'
+t = Parameter('LP', 'arwarp')
 if t == 'arwarp':
     wa, wg = ARBilinearWarp(a, g, alpha=mel[r])
     lap("AR Warp")
@@ -80,18 +78,26 @@ elif t == 'acwarp':
     lap("AC Warp")
 elif t == 'ridge':
     ac = Autocorrelation(f)
-    wa, wg = ARRidge(ac, order, ridge=0.5)
+    wa, wg = ARRidge(ac, order, ridge=0.01)
     lap("Ridge")
 elif t == 'lasso':
     ac = Autocorrelation(f)
     wa, wg = ARLasso(ac, order, ridge=30)
     lap("Lasso")
+elif t == 'sparse':
+    wa, wg = ARSparse(f, order)
+    lap("Sparse")
 ws = ARSpectrum(wa, wg, nSpec=128)
 lap("Spectrum")
 
+#llRatio = ARLogLikelihoodRatio(f, order)
+
+exn = ARExcitation(f, a, g)
+exnw = ARExcitation(f, wa, wg)
+
 # Draw it
 # fig.add_subplot(2,1,1) # two rows, one column, first plot
-frame = 38
+frame = 13
 fig = plt.figure()
 plt.bone()
 pdfSpec = fig.add_subplot(3,2,1)
@@ -101,15 +107,23 @@ larPlot = fig.add_subplot(3,2,4)
 warSpec = fig.add_subplot(3,2,5)
 warPlot = fig.add_subplot(3,2,6)
 
-pdfSpec.imshow(np.transpose(np.log10(p[:,:p.shape[1]/2+1])), origin='lower', aspect='auto')
+pdfSpec.imshow(np.transpose(np.log10(p[:,:p.shape[1]/2+1])),
+               origin='lower', aspect='auto')
 pdfPlot.plot(np.log10(e/f.shape[1]))
 pdfPlot.plot(np.log10(g))
 pdfPlot.plot(np.log10(wg))
-larSpec.imshow(np.transpose(np.log10(ls)), origin='lower', aspect='auto')
-larPlot.plot(Norm(a, 1))
-larPlot.plot(Norm(wa, 1))
-warSpec.imshow(np.transpose(np.log10(ws)), origin='lower', aspect='auto')
 
+#pdfPlot.plot(llRatio)
+
+larSpec.imshow(np.transpose(np.log10(ls)), origin='lower', aspect='auto')
+#larPlot.plot(Norm(a, 1))
+#larPlot.plot(Norm(wa, 1))
+larPlot.plot(exn[frame])
+larPlot.plot(exn[frame])
+larPlot.plot(exnw[frame])
+
+
+warSpec.imshow(np.transpose(np.log10(ws)), origin='lower', aspect='auto')
 warPlot.plot(np.log10(p[frame,:p.shape[1]/2+1]/f.shape[1]))
 warPlot.plot(np.log10(ls[frame]), label="Linear")
 warPlot.plot(np.log10(ws[frame]), label="Warped")
