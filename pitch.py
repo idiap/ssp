@@ -19,28 +19,44 @@ from ssp import *
 import numpy as np
 import matplotlib.pyplot as plt
 
+fs = 256
+fp = 256
+
+loPitch = 40
+hiPitch = 1000
+
 # Load and process
-print "Using file:", file
 r, a = WavSource(file)
 
-fs = 1024
-fp = 256
+loBin = hertz_to_bin(loPitch, fs, r)
+hiBin = hertz_to_bin(hiPitch, fs, r)
+print "Pitch range is", loBin, "to", hiBin
 
 # Basic spectral analysis
 a = ZeroFilter(a)
 f = Frame(a, size=fs, period=fp)
-w = Window(f, nuttall(fs))
-p = Periodogram(w)
+#w = Window(f, nuttall(fs))
+p = Periodogram(f)
 
 # Plot
-fig = plt.figure()
-pSpec = fig.add_subplot(4,1,1)
+fig = Figure(4,1)
+pSpec = fig.subplot()
 specplot(pSpec, p[:,:p.shape[1]/2+1], r)
 
 
-method = Parameter('method', 'map')
+method = Parameter('Method', 'map')
 
-if method == 'ar':
+if method == 'ac':
+    ac = Autocorrelation(p, 'psd')
+    acSpec = fig.subplot()
+    specplot(acSpec, ac, r)
+
+    fPlot = fig.subplot()
+    fPlot.set_xlim(0, fs)
+    frame = Parameter("Frame", 10)
+    fPlot.plot(np.divide(ac[frame], Norm(p[frame], 2)), 'c')
+
+elif method == 'ar':
     # Low order AR
     order = 15
     a = Autocorrelation(w)
@@ -55,8 +71,8 @@ if method == 'ar':
     a, g = ARLasso(a, order, 500)
     l = ARSpectrum(a, g, nSpec=fs/2)
 
-    epSpec = fig.add_subplot(4,1,2)
-    lSpec = fig.add_subplot(4,1,3)
+    epSpec = fig.subplot()
+    lSpec = fig.subplot()
     specplot(epSpec, ep[:,:ep.shape[1]/2+1], r)
     specplot(lSpec, l, r)
 
@@ -64,7 +80,7 @@ if method == 'ar':
     m, s = ARAngle(c)
 
     if 1:
-        rSpec = fig.add_subplot(4,1,4)
+        rSpec = fig.subplot()
         rSpec.set_xlim(0, len(m)-1)
         rSpec.plot(m / np.pi * r, 'r')
         rSpec.plot((m+s) / np.pi * r, 'b')
@@ -75,25 +91,25 @@ if method == 'ar':
 
 elif method == 'map':
     h = Harmonogram(p, 'psd')
-    hSpec = fig.add_subplot(4,1,2)
+    hSpec = fig.subplot()
     specplot(hSpec, h, r)
 
     # Low order AR
     order = 15
-    a = Autocorrelation(w)
+    a = Autocorrelation(f)
     la, lg = ARLevinson(a, order)
     e = ARExcitation(f, la, lg)
 
     eh = Harmonogram(e)
-    ehSpec = fig.add_subplot(4,1,3)
+    ehSpec = fig.subplot()
     specplot(ehSpec, eh, r)
 
-    frame = 68
-    rSpec = fig.add_subplot(4,1,4)
-    rSpec.set_xlim(0, h.shape[1]-1)
+    frame = Parameter('Frame', 1)
+    rSpec = fig.subplot()
+    rSpec.set_xlim(0, hiBin-1)
     
-    rSpec.plot(p[frame,:512] / Norm(p[frame,:512], 2), 'c')
-    rSpec.plot(h[frame] / Norm(h[frame], 2), 'r')
-    rSpec.plot(eh[frame] / Norm(eh[frame], 2), 'b')
+    rSpec.plot(np.divide(p[frame,:hiBin], Norm(p[frame,:hiBin], 2)), 'c')
+#    rSpec.plot(h[frame,:hiBin] / Norm(h[frame,:hiBin], 2), 'r')
+#    rSpec.plot(eh[frame,:hiBin] / Norm(eh[frame,:hiBin], 2), 'b')
 
 plt.show()

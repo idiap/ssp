@@ -16,6 +16,7 @@ from scipy.io import wavfile
 from os import environ
 def Parameter(param, default=None):
     if param in environ:
+        print 'export {}={}'.format(param, environ[param])
         # Try to cast it to a numeric type
         for caster in (int, float):
             try:
@@ -24,8 +25,40 @@ def Parameter(param, default=None):
                 pass
         return environ[param]
     else:
-        # Otherwise it's a string
+        # Otherwise it's whatever was supplied as a default
+        print '# export {}={}'.format(param, default)
         return default
+
+# Calculate the shape of a new array with the lowest dimension replaced
+def newshape(s, lowdim=1):
+    sl = list(np.shape(s))
+    sl[-1] = lowdim
+    return tuple(sl)
+
+# An ND array generator
+# There must be a less convoluted way to do this
+def lowdims(a, out):
+    if a.ndim == 1:
+        yield a, out
+    else:
+        # Iterate over a temp array of the new shape
+        # Do we need to use a temp array?
+        it = np.nditer(np.ndarray(newshape(a)), flags=['multi_index'])
+        while not it.finished:
+            yield a[it.multi_index], out[it.multi_index]
+            it.iternext()
+
+# Convert between frequency and things
+def hertz_to_bin(hz, fs, rate):
+    return int(float(hz) / float(rate) * fs + 0.5)
+
+def bin_to_hertz(b, fs, rate):
+    return float(b) * rate / float(fs)
+
+#
+# The functions here use ThisFormat rather than this_format to make
+# them look more like Tracter.  They also use the lowdims() iterator
+#
 
 # Load a .wav file
 def WavSource(file):
@@ -70,7 +103,7 @@ def Energy(a):
     return e
 
 # Lx norm
-def Norm(a, L=2):
+def NormX(a, L=2):
     if a.ndim > 1:
         ret = np.ndarray(a.shape[0])
         for f in range(a.shape[0]):
@@ -79,6 +112,12 @@ def Norm(a, L=2):
 
     e = linalg.norm(a, ord=L)
     return e
+
+def Norm(a, L=2):
+    out = np.ndarray(newshape(a))
+    for i, o in lowdims(a, out):
+        o[0] = linalg.norm(i, ord=L)
+    return out
 
 def Periodogram(a):
     if a.ndim > 1:
@@ -105,6 +144,7 @@ def Harmonogram(a, input=None):
         psd = np.abs(np.fft.fft(a))**2
 
     hg = np.zeros(len(psd)/2)
+    hg[0] = psd[0]
     for b in range(1, len(hg)):
         h = b
         while h < len(hg):
@@ -699,7 +739,6 @@ def blackmanharris(n):
 
 def blackmannuttall(n):
     return raisedCosine(n, (0.3635819, 0.4891775, 0.1365995, 0.0106411))
-
 
 import matplotlib.pyplot as plt
 def zplot(fig, a):
