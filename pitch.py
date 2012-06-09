@@ -15,28 +15,69 @@ if (len(arg) < 1):
     exit(1)
 file = arg[0]
 
+
+def kalman(obs, obsVar, seqVar, initMean, initVar):
+    stateMean = np.ndarray(len(obs))
+    stateVar  = np.ndarray(len(obs))
+
+    # Initialise
+    stateMean[0] = ( (obs[0] * initVar + initMean * obsVar[0]) /
+                     (initVar + obsVar[0]) )
+    stateVar[0]  = initVar * obsVar[0] / (initVar + obsVar[0])
+
+    # Filter loop
+    for i in range(1, len(obs)):
+        predictor = seqVar + stateVar[i-1]
+        stateMean[i] = ( (obs[i] * predictor + stateMean[i-1] * obsVar[i]) /
+                         (predictor + obsVar[i]) )
+        stateVar[i]  = predictor * obsVar[i] / (predictor + obsVar[i])
+
+    # Smoother loop
+    for i in reversed(range(len(obs)-1)):
+        stateMean[i] = ( stateMean[i+1] * stateVar[i] +
+                         stateMean[i]   * seqVar )
+        stateMean[i] /= (seqVar + stateVar[i])
+        J = stateVar[i] / (stateVar[i] + seqVar)
+        stateVar[i] = J * (seqVar + J * stateVar[i+1])
+
+    return stateMean, stateVar
+
 from ssp import *
 import numpy as np
 import matplotlib.pyplot as plt
 
-fs = 256
+fs = 512
 fp = 256
 
 loPitch = 40
 hiPitch = 1000
 
+loPeriod = 1.0 / loPitch
+hiPeriod = 1.0 / hiPitch
+
 # Load and process
 r, a = WavSource(file)
 
-loBin = hertz_to_bin(loPitch, fs, r)
-hiBin = hertz_to_bin(hiPitch, fs, r)
-print "Pitch range is", loBin, "to", hiBin
+loDFTBin = hertz_to_dftbin(loPitch, fs, r)
+hiDFTBin = hertz_to_dftbin(hiPitch, fs, r)
+print "Pitch range is bins", loDFTBin, "to", hiDFTBin
 
-# Basic spectral analysis
+loACBin = seconds_to_acbin(hiPeriod, r)
+hiACBin = seconds_to_acbin(loPeriod, r)
+print "Period range is bins", loACBin, "to", hiACBin
+
+# The AC bin for the period of the lowest frequency needs to be
+# smaller than the size of the AC.
+if hiACBin >= fs / 2:
+    print "Frame size {} too small for pitch {} Hz".format(fs, loPitch)
+
+# Basic spectral analysis, windowed, for reference
+w = np.hanning(fs)
+#w = gaussian(fs)
 a = ZeroFilter(a)
 f = Frame(a, size=fs, period=fp)
-#w = Window(f, nuttall(fs))
-p = Periodogram(f)
+wf = Window(f, w)
+p = Periodogram(wf)
 
 # Plot
 fig = Figure(4,1)
@@ -44,17 +85,41 @@ pSpec = fig.subplot()
 specplot(pSpec, p[:,:p.shape[1]/2+1], r)
 
 
-method = Parameter('Method', 'map')
+method = Parameter('Method', 'ac')
 
 if method == 'ac':
+    # Autocorrelation method, loosely after Boersma
     ac = Autocorrelation(p, 'psd')
-    acSpec = fig.subplot()
-    specplot(acSpec, ac, r)
+    for i in range(len(ac)):
+        ac[i] /= ac[i, 0]
+    wac = Autocorrelation(w)
+    wac /= wac[0]
+    nac = Divide(ac, wac)
 
     fPlot = fig.subplot()
     fPlot.set_xlim(0, fs)
     frame = Parameter("Frame", 10)
-    fPlot.plot(np.divide(ac[frame], Norm(p[frame], 2)), 'c')
+    fPlot.plot(nac[frame], 'c')
+
+    m = np.argmax(nac[:,loACBin:hiACBin], axis=1) + loACBin
+    pitch = np.ndarray(len(m))
+    hnr = np.ndarray(len(m))
+    var = np.ndarray(len(m))
+    for i in range(len(m)):
+        pitch[i] = 1.0 / acbin_to_seconds(m[i], r)
+        hnr[i] = nac[i, m[i]] / (1.0 - nac[i, m[i]])
+        # var[i] = -np.log(nac[i, m[i]])
+        var[i] = (1.0 / hnr[i])**2 * hiPitch
+
+    pPlot = fig.subplot()
+    pPlot.set_xlim(0, len(pitch))
+    pPlot.plot(pitch, 'r')
+    #pPlot.plot(hnr * hiPitch, 'g')
+    #pPlot.plot(var * hiPitch, 'b')
+
+    # Kalman smoother
+    kpitch, kvar = kalman(pitch, var, 10.0, hiPitch+loPitch/2, hiPitch*hiPitch)
+    pPlot.plot(kpitch, 'c')
 
 elif method == 'ar':
     # Low order AR
@@ -106,10 +171,10 @@ elif method == 'map':
 
     frame = Parameter('Frame', 1)
     rSpec = fig.subplot()
-    rSpec.set_xlim(0, hiBin-1)
+    rSpec.set_xlim(0, hiDFTBin-1)
     
-    rSpec.plot(np.divide(p[frame,:hiBin], Norm(p[frame,:hiBin], 2)), 'c')
-#    rSpec.plot(h[frame,:hiBin] / Norm(h[frame,:hiBin], 2), 'r')
-#    rSpec.plot(eh[frame,:hiBin] / Norm(eh[frame,:hiBin], 2), 'b')
+    rSpec.plot(np.divide(p[frame,:hiDFTBin], Norm(p[frame,:hiDFTBin], 2)), 'c')
+#    rSpec.plot(h[frame,:hiDFTBin] / Norm(h[frame,:hiDFTBin], 2), 'r')
+#    rSpec.plot(eh[frame,:hiDFTBin] / Norm(eh[frame,:hiDFTBin], 2), 'b')
 
 plt.show()

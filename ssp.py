@@ -49,11 +49,17 @@ def lowdims(a, out):
             it.iternext()
 
 # Convert between frequency and things
-def hertz_to_bin(hz, fs, rate):
+def hertz_to_dftbin(hz, fs, rate):
     return int(float(hz) / float(rate) * fs + 0.5)
 
-def bin_to_hertz(b, fs, rate):
+def dftbin_to_hertz(b, fs, rate):
     return float(b) * rate / float(fs)
+
+def seconds_to_acbin(sec, rate):
+    return int(float(sec) * float(rate) + 0.5)
+
+def acbin_to_seconds(b, rate):
+    return float(b) / rate
 
 #
 # The functions here use ThisFormat rather than this_format to make
@@ -103,16 +109,6 @@ def Energy(a):
     return e
 
 # Lx norm
-def NormX(a, L=2):
-    if a.ndim > 1:
-        ret = np.ndarray(a.shape[0])
-        for f in range(a.shape[0]):
-            ret[f] = Norm(a[f], L)
-        return ret
-
-    e = linalg.norm(a, ord=L)
-    return e
-
 def Norm(a, L=2):
     out = np.ndarray(newshape(a))
     for i, o in lowdims(a, out):
@@ -429,7 +425,7 @@ def ARPoly(a):
     r = np.roots(np.insert(a, 0, -1))
     return r
 
-# Tries to find the angle correesponding to the fundamental frequency
+# Tries to find the angle corresponding to the fundamental frequency
 def ARAngle(a):
     if a.ndim > 1:
         ret_m = np.ndarray(a.shape)
@@ -739,6 +735,12 @@ def blackmanharris(n):
 
 def blackmannuttall(n):
     return raisedCosine(n, (0.3635819, 0.4891775, 0.1365995, 0.0106411))
+
+def gaussian(n, sigma=0.5):
+    w = np.zeros(n)
+    for i in range(n):
+        w[i] = np.exp(-0.5 * ( (i-(n-1)/2) / (sigma*(n-1)/2) )**2)
+    return w
 
 import matplotlib.pyplot as plt
 def zplot(fig, a):
