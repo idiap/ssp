@@ -7,6 +7,15 @@
 # Author(s):
 #   Phil Garner
 #
+
+#
+# Notes:
+#
+# you'd think that log(f0) would be the thing to measure.  It doesn't
+# really work in the Kalman smoother though.  The mean gets pulled up
+# or down, rather than remaining steady when there is high variance.
+#
+
 from optparse import OptionParser
 op = OptionParser()
 (option, arg) = op.parse_args()
@@ -16,47 +25,26 @@ if (len(arg) < 1):
 file = arg[0]
 
 
-def kalman(obs, obsVar, seqVar, initMean, initVar):
-    stateMean = np.ndarray(len(obs))
-    stateVar  = np.ndarray(len(obs))
-
-    # Initialise
-    stateMean[0] = ( (obs[0] * initVar + initMean * obsVar[0]) /
-                     (initVar + obsVar[0]) )
-    stateVar[0]  = initVar * obsVar[0] / (initVar + obsVar[0])
-
-    # Filter loop
-    for i in range(1, len(obs)):
-        predictor = seqVar + stateVar[i-1]
-        stateMean[i] = ( (obs[i] * predictor + stateMean[i-1] * obsVar[i]) /
-                         (predictor + obsVar[i]) )
-        stateVar[i]  = predictor * obsVar[i] / (predictor + obsVar[i])
-
-    # Smoother loop
-    for i in reversed(range(len(obs)-1)):
-        stateMean[i] = ( stateMean[i+1] * stateVar[i] +
-                         stateMean[i]   * seqVar )
-        stateMean[i] /= (seqVar + stateVar[i])
-        J = stateVar[i] / (stateVar[i] + seqVar)
-        stateVar[i] = J * (seqVar + J * stateVar[i+1])
-
-    return stateMean, stateVar
 
 from ssp import *
 import numpy as np
 import matplotlib.pyplot as plt
 
+# Load and process
+r, a = WavSource(file)
+
+# Default to 8k
 fs = 512
 fp = 256
+if r == 16000:
+    fs = 1024
+    fp = 512
 
 loPitch = 40
 hiPitch = 1000
 
 loPeriod = 1.0 / loPitch
 hiPeriod = 1.0 / hiPitch
-
-# Load and process
-r, a = WavSource(file)
 
 loDFTBin = hertz_to_dftbin(loPitch, fs, r)
 hiDFTBin = hertz_to_dftbin(hiPitch, fs, r)
@@ -71,10 +59,10 @@ print "Period range is bins", loACBin, "to", hiACBin
 if hiACBin >= fs / 2:
     print "Frame size {} too small for pitch {} Hz".format(fs, loPitch)
 
-# Basic spectral analysis, windowed, for reference
-w = np.hanning(fs)
-#w = gaussian(fs)
-a = ZeroFilter(a)
+# Basic spectral analysis, windowed, for reference.  Don't do
+# pre-emphasis; it will break low F0 speakers.
+#w = np.hanning(fs)
+w = gaussian(fs)
 f = Frame(a, size=fs, period=fp)
 wf = Window(f, w)
 p = Periodogram(wf)
@@ -99,27 +87,42 @@ if method == 'ac':
     fPlot = fig.subplot()
     fPlot.set_xlim(0, fs)
     frame = Parameter("Frame", 10)
+    fPlot.plot(ac[frame], 'b')
     fPlot.plot(nac[frame], 'c')
 
+    # Pitch bin is the maximum in each frame
     m = np.argmax(nac[:,loACBin:hiACBin], axis=1) + loACBin
+
+    # Convert to pitch and harmonic noise ratio
     pitch = np.ndarray(len(m))
     hnr = np.ndarray(len(m))
     var = np.ndarray(len(m))
+    prange = hiPitch - loPitch
     for i in range(len(m)):
         pitch[i] = 1.0 / acbin_to_seconds(m[i], r)
         hnr[i] = nac[i, m[i]] / (1.0 - nac[i, m[i]])
-        # var[i] = -np.log(nac[i, m[i]])
-        var[i] = (1.0 / hnr[i])**2 * hiPitch
+        var[i] = (1.0 / hnr[i])**2 * prange**2
+
+    hPlot = fig.subplot()
+    hPlot.plot(hnr)
+    hPlot.plot(1/hnr)
+    hPlot.plot(1/hnr**2)
+    hPlot.set_xlim(0, len(pitch))
+    hPlot.set_ylim(0, 5)
 
     pPlot = fig.subplot()
-    pPlot.set_xlim(0, len(pitch))
     pPlot.plot(pitch, 'r')
-    #pPlot.plot(hnr * hiPitch, 'g')
-    #pPlot.plot(var * hiPitch, 'b')
 
     # Kalman smoother
-    kpitch, kvar = kalman(pitch, var, 10.0, hiPitch+loPitch/2, hiPitch*hiPitch)
-    pPlot.plot(kpitch, 'c')
+    kPitch, kVar = kalman(
+        pitch, var, 1e4, loPitch + prange/2, prange**2
+        )
+    stddev = np.sqrt(kVar)
+    pPlot.plot(kPitch, 'c')
+    pPlot.plot(kPitch + stddev, 'b')
+    pPlot.plot(kPitch - stddev, 'b')
+    pPlot.set_xlim(0, len(pitch))
+    pPlot.set_ylim(0, hiPitch)
 
 elif method == 'ar':
     # Low order AR

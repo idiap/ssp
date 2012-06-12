@@ -16,7 +16,7 @@ from scipy.io import wavfile
 from os import environ
 def Parameter(param, default=None):
     if param in environ:
-        print 'export {}={}'.format(param, environ[param])
+        print 'export {0}={1}'.format(param, environ[param])
         # Try to cast it to a numeric type
         for caster in (int, float):
             try:
@@ -26,7 +26,7 @@ def Parameter(param, default=None):
         return environ[param]
     else:
         # Otherwise it's whatever was supplied as a default
-        print '# export {}={}'.format(param, default)
+        print '# export {0}={1}'.format(param, default)
         return default
 
 # Calculate the shape of a new array with the lowest dimension replaced
@@ -769,3 +769,30 @@ class Figure:
         axesSubplot = self.fig.add_subplot(self.rows, self.cols, self.next)
         self.next += 1
         return axesSubplot
+
+
+def kalman(obs, obsVar, seqVar, initMean, initVar):
+    stateMean = np.ndarray(len(obs))
+    stateVar  = np.ndarray(len(obs))
+
+    # Initialise
+    stateMean[0] = ( (obs[0] * initVar + initMean * obsVar[0]) /
+                     (initVar + obsVar[0]) )
+    stateVar[0]  = initVar * obsVar[0] / (initVar + obsVar[0])
+
+    # Filter loop
+    for i in range(1, len(obs)):
+        predictor = seqVar + stateVar[i-1]
+        stateMean[i] = ( (obs[i] * predictor + stateMean[i-1] * obsVar[i]) /
+                         (predictor + obsVar[i]) )
+        stateVar[i]  = predictor * obsVar[i] / (predictor + obsVar[i])
+
+    # Smoother loop
+    for i in reversed(range(len(obs)-1)):
+        stateMean[i] = ( stateMean[i+1] * stateVar[i] +
+                         stateMean[i]   * seqVar )
+        stateMean[i] /= (seqVar + stateVar[i])
+        J = stateVar[i] / (stateVar[i] + seqVar)
+        stateVar[i] = J * (seqVar + J * stateVar[i+1])
+
+    return stateMean, stateVar
