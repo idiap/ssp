@@ -30,23 +30,43 @@ def Parameter(param, default=None):
         return default
 
 # Calculate the shape of a new array with the lowest dimension replaced
-def newshape(s, lowdim=1):
+def newshape(s, lowdim=0):
     sl = list(np.shape(s))
-    sl[-1] = lowdim
+    if lowdim == 0:
+        sl.pop()
+    else:
+        sl[-1] = lowdim
     return tuple(sl)
 
-# An ND array generator
-# There must be a less convoluted way to do this
-def lowdims(a, out):
-    if a.ndim == 1:
-        yield a, out
-    else:
-        # Iterate over a temp array of the new shape
-        # Do we need to use a temp array?
-        it = np.nditer(np.ndarray(newshape(a)), flags=['multi_index'])
-        while not it.finished:
-            yield a[it.multi_index], out[it.multi_index]
-            it.iternext()
+
+def shapeiter(shape, dim=0, index=None):
+    """
+    Given a tuple representing an ndarray shape, iterates over all
+    indices in that shape in C order.  Typically it should be called
+    as shapeiter(shape); the other arguments are part of the recursive
+    function.
+    """
+    if not index:
+        index = [0]*len(shape)
+    for i in range(shape[dim]):
+        index[dim] = i
+        if dim < len(shape)-1:
+            for val in shapeiter(shape, dim+1, index):
+                yield val
+        else:
+            yield tuple(index)
+
+def refiter(a, shape):
+    """
+    Iterates over a shape using shapeiter(), but uses the indices to
+    yield references into the arrays passed in a.
+    """
+    for i in shapeiter(shape):
+        if type(a) == list:
+            yield [x[i] for x in a]
+        else:
+            yield a[i]
+
 
 # Convert between frequency and things
 def hertz_to_dftbin(hz, fs, rate):
