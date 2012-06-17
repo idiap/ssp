@@ -1,4 +1,4 @@
-#!/usr/bin/python2
+#!/usr/bin/env python
 #
 # Copyright 2011 by Idiap Research Institute, http://www.idiap.ch
 #
@@ -11,9 +11,12 @@
 #
 # Notes:
 #
-# you'd think that log(f0) would be the thing to measure.  It doesn't
+# You'd think that log(f0) would be the thing to measure.  It doesn't
 # really work in the Kalman smoother though.  The mean gets pulled up
 # or down, rather than remaining steady when there is high variance.
+#
+# Autocorrelation on the excitation is very noisy for 16 kHz, but OK
+# for 8 kHz.  Ergo, the harmonic excitation itself is band-limited.
 #
 
 from optparse import OptionParser
@@ -22,26 +25,27 @@ op = OptionParser()
 if (len(arg) < 1):
     print "Need one arg"
     exit(1)
-file = arg[0]
-
-
+wavFile = arg[0]
 
 from ssp import *
-import numpy as np
-import matplotlib.pyplot as plt
+
+# Reference f0 from tempo
+tempo = None
+if len(arg) > 1:
+    tempo = np.loadtxt(arg[1])
 
 # Load and process
-r, a = WavSource(file)
+r, a = WavSource(wavFile)
 
 # Default to 8k
 fs = 512
 fp = 256
 if r == 16000:
     fs = 1024
-    fp = 512
+    fp = 160
 
 loPitch = 40
-hiPitch = 1000
+hiPitch = 500
 
 loPeriod = 1.0 / loPitch
 hiPeriod = 1.0 / hiPitch
@@ -64,6 +68,7 @@ if hiACBin >= fs / 2:
 #w = np.hanning(fs)
 w = gaussian(fs)
 f = Frame(a, size=fs, period=fp)
+f = ZeroMean(f)
 wf = Window(f, w)
 p = Periodogram(wf)
 
@@ -76,6 +81,15 @@ specplot(pSpec, p[:,:p.shape[1]/2+1], r)
 method = Parameter('Method', 'ac')
 
 if method == 'ac':
+    if False:
+        # Low order AR
+        order = 10
+        a = Autocorrelation(p, 'psd')
+        la, lg = ARLevinson(a, order)
+        f = ARExcitation(wf, la, lg)
+        f = ZeroMean(f)
+        p = Periodogram(f)
+
     # Autocorrelation method, loosely after Boersma
     ac = Autocorrelation(p, 'psd')
     for i in range(len(ac)):
@@ -84,11 +98,14 @@ if method == 'ac':
     wac /= wac[0]
     nac = Divide(ac, wac)
 
-    fPlot = fig.subplot()
-    fPlot.set_xlim(0, fs)
-    frame = Parameter("Frame", 10)
-    fPlot.plot(ac[frame], 'b')
-    fPlot.plot(nac[frame], 'c')
+    if False:
+        fPlot = fig.subplot()
+        fPlot.set_xlim(0, fs)
+        frame = Parameter("Frame", 10)
+        #fPlot.plot(f[frame], 'r')
+        fPlot.plot(wf[frame], 'g')
+        #fPlot.plot(ac[frame], 'b')
+        #fPlot.plot(nac[frame], 'c')
 
     # Pitch bin is the maximum in each frame
     m = np.argmax(nac[:,loACBin:hiACBin], axis=1) + loACBin
@@ -103,12 +120,16 @@ if method == 'ac':
         hnr[i] = nac[i, m[i]] / (1.0 - nac[i, m[i]])
         var[i] = (1.0 / hnr[i])**2 * prange**2
 
-    hPlot = fig.subplot()
-    hPlot.plot(hnr)
-    hPlot.plot(1/hnr)
-    hPlot.plot(1/hnr**2)
-    hPlot.set_xlim(0, len(pitch))
-    hPlot.set_ylim(0, 5)
+    if False:
+        hPlot = fig.subplot()
+        hPlot.plot(hnr)
+        hPlot.plot(1/hnr)
+        hPlot.plot(1/hnr**2)
+        hPlot.set_xlim(0, len(pitch))
+        hPlot.set_ylim(0, 5)
+
+    sSpec = fig.subplot()
+    specplot(sSpec, p[:,:hertz_to_dftbin(hiPitch, fs, r)], hiPitch*2)
 
     pPlot = fig.subplot()
     pPlot.plot(pitch, 'r')
@@ -123,6 +144,34 @@ if method == 'ac':
     pPlot.plot(kPitch - stddev, 'b')
     pPlot.set_xlim(0, len(pitch))
     pPlot.set_ylim(0, hiPitch)
+
+    # Now run it again, but with tighter limits
+    mpitch = np.mean(kPitch)
+    for i in range(len(nac)):
+        hi = seconds_to_acbin(1.0 / (kPitch[i] * 0.75), r)
+        lo = seconds_to_acbin(1.0 / (kPitch[i] * 1.5), r)
+        rng = hi - lo
+        loBin = np.max([lo, loACBin])
+        hiBin = np.min([hi, hiACBin])
+        m[i] = np.argmax(nac[i, loBin:hiBin]) + loBin
+        pitch[i] = 1.0 / acbin_to_seconds(m[i], r)
+        hnr[i] = nac[i, m[i]] / (1.0 - nac[i, m[i]])
+        var[i] = (1.0 / hnr[i])**2 * rng**2
+    
+    sPlot = fig.subplot()
+    sPlot.plot(pitch, 'r')
+    sPlot.plot(tempo, 'm')
+
+    # Kalman smoother again
+    kPitch, kVar = kalman(
+        pitch, var, 1e8, mpitch, prange**2
+        )
+    stddev = np.sqrt(kVar)
+    sPlot.plot(kPitch, 'c')
+    sPlot.plot(kPitch + stddev, 'b')
+    sPlot.plot(kPitch - stddev, 'b')
+    sPlot.set_xlim(0, len(pitch))
+    sPlot.set_ylim(0, hiPitch)
 
 elif method == 'ar':
     # Low order AR

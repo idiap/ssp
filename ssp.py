@@ -115,6 +115,13 @@ def Norm(a, L=2):
         o[0] = linalg.norm(i, ord=L)
     return out
 
+# Zero mean a framed signal
+def ZeroMean(a):
+    ret = np.ndarray(a.shape)
+    for r in range(a.shape[0]):
+        ret[r] = a[r] - np.mean(a[r])
+    return ret
+
 def Periodogram(a):
     if a.ndim > 1:
         ret = np.ndarray(a.shape)
@@ -742,6 +749,8 @@ def gaussian(n, sigma=0.5):
         w[i] = np.exp(-0.5 * ( (i-(n-1)/2) / (sigma*(n-1)/2) )**2)
     return w
 
+import matplotlib
+#matplotlib.use('Qt4Agg')
 import matplotlib.pyplot as plt
 def zplot(fig, a):
     ax = fig.add_axes([0.1, 0.1, 0.8, 0.8], polar=True)
