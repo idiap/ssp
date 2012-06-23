@@ -43,7 +43,7 @@ lap("Import")
 print "Using file:", file
 r, a = WavSource(file)
 print "rate:", r, "size:", a.size
-a = ZeroFilter(a)
+#a = ZeroFilter(a)
 f = Frame(a, size=256, period=128)
 f = Window(f, np.hanning(256))
 print "frame:", f.shape[0], "x", f.shape[1]
@@ -59,7 +59,7 @@ if 1:
     a, g = ARLevinson(a, order)
     lap("Levinson")
 else:
-    a, g = ARMatrix(f, order, method='acmatrix')
+    a, g = ARMatrix(f, order, method=Parameter('Method', 'matrix'))
     lap("Matrix")
 
 ls = ARSpectrum(a, g, nSpec=128)
@@ -67,14 +67,15 @@ lap("Spectrum")
 
 t = Parameter('LP', 'arwarp')
 if t == 'arwarp':
-    wa, wg = ARBilinearWarp(a, g, alpha=mel[r])
+    wa, wg = ARAllPassWarp(a, g, alpha=mel[r])
     lap("AR Warp")
 elif t == 'acwarp':
     ac = Autocorrelation(f)
-    ac = AutocorrelationBilinearWarp(ac, alpha=mel[r], size=order+1)
-    wa, wg = ARLevinson(ac, order)
+    ac = AutocorrelationAllPassWarp(ac, alpha=mel[r], size=order+1)
+#    wa, wg = ARLevinson(ac, order)
 #    wa, wg = ARRidge(ac, order, ridge=0.1)
 #    wa, wg = ARLasso(ac, order, ridge=10)
+    wa, wg = ARSparse(ac, order)
     lap("AC Warp")
 elif t == 'ridge':
     ac = Autocorrelation(f)
@@ -95,9 +96,10 @@ lap("Spectrum")
 exn = ARExcitation(f, a, g)
 exnw = ARExcitation(f, wa, wg)
 
+
 # Draw it
 # fig.add_subplot(2,1,1) # two rows, one column, first plot
-frame = 13
+frame = Parameter('Frame', 0)
 fig = plt.figure()
 plt.bone()
 pdfSpec = fig.add_subplot(3,2,1)
@@ -107,8 +109,7 @@ larPlot = fig.add_subplot(3,2,4)
 warSpec = fig.add_subplot(3,2,5)
 warPlot = fig.add_subplot(3,2,6)
 
-pdfSpec.imshow(np.transpose(np.log10(p[:,:p.shape[1]/2+1])),
-               origin='lower', aspect='auto')
+pdfSpec.imshow(np.transpose(np.log10(p)), origin='lower', aspect='auto')
 pdfPlot.plot(np.log10(e/f.shape[1]))
 pdfPlot.plot(np.log10(g))
 pdfPlot.plot(np.log10(wg))
@@ -124,7 +125,7 @@ larPlot.plot(exnw[frame])
 
 
 warSpec.imshow(np.transpose(np.log10(ws)), origin='lower', aspect='auto')
-warPlot.plot(np.log10(p[frame,:p.shape[1]/2+1]/f.shape[1]))
+warPlot.plot(np.log10(p[frame]/f.shape[1]))
 warPlot.plot(np.log10(ls[frame]), label="Linear")
 warPlot.plot(np.log10(ws[frame]), label="Warped")
 #warPlot.legend()

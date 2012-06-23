@@ -29,9 +29,13 @@ def Parameter(param, default=None):
         print '# export {0}={1}'.format(param, default)
         return default
 
-# Calculate the shape of a new array with the lowest dimension replaced
 def newshape(s, lowdim=0):
-    sl = list(np.shape(s))
+    """
+    Given a shape s, calculate the shape of a new array with the
+    lowest dimension replaced.  If lowdim is zero the lowest dimension
+    is removed, otherwise it is replaced.
+    """
+    sl = list(s)
     if lowdim == 0:
         sl.pop()
     else:
@@ -61,11 +65,14 @@ def refiter(a, shape):
     Iterates over a shape using shapeiter(), but uses the indices to
     yield references into the arrays passed in a.
     """
-    for i in shapeiter(shape):
-        if type(a) == list:
-            yield [x[i] for x in a]
-        else:
-            yield a[i]
+    if len(shape) == 0:
+        yield a
+    else:
+        for i in shapeiter(shape):
+            if type(a) == list:
+                yield [x[i] for x in a]
+            else:
+                yield a[i]
 
 
 # Convert between frequency and things
@@ -111,8 +118,13 @@ def ZeroFilter(a, zero=0.97):
     return filter
 
 # Convert array to framed array
-# The opposite of this is a.flatten
-def Frame(a, size=512, period=256):
+# The opposite of this for size = period is a.flatten
+def Frame(a, size=512, period=256, pad=True):
+    if pad:
+        # This ensures that frames are aligned in the centre
+        x = [a[0]]*(size/2)
+        y = [a[-1]]*(size/2)
+        a = np.concatenate((x, a, y))
     nFrames = (a.size - (size-period)) // period
     frame = np.zeros((nFrames, size))
     for r in range(nFrames):
@@ -125,12 +137,12 @@ def Frame(a, size=512, period=256):
 def Energy(a):
     e = np.zeros(a.shape[0])
     for r in range(a.shape[0]):
-        e[r] = linalg.norm(a[r,:])**2
+        e[r] = linalg.norm(a[r])**2
     return e
 
 # Lx norm
 def Norm(a, L=2):
-    out = np.ndarray(newshape(a))
+    out = np.ndarray(newshape(a.shape))
     for i, o in lowdims(a, out):
         o[0] = linalg.norm(i, ord=L)
     return out
@@ -143,58 +155,58 @@ def ZeroMean(a):
     return ret
 
 def Periodogram(a):
-    if a.ndim > 1:
-        ret = np.ndarray(a.shape)
-        for f in range(a.shape[0]):
-            ret[f] = Periodogram(a[f])
-        return ret
+    size = a.shape[-1]/2 + 1
+    ret = np.ones(newshape(a.shape, size))
+    for i, o in refiter([a, ret], newshape(a.shape)):
+        o[...] = np.abs(np.fft.fft(i)[:size])**2
+    return ret
 
-    psd = np.abs(np.fft.fft(a))**2
-    return psd
-
-def Harmonogram(a, input=None):
-    if a.ndim > 1:
-        d = list(a.shape)
-        d[-1] /= 2
-        ret = np.ndarray(tuple(d))
-        for f in range(a.shape[0]):
-            ret[f] = Harmonogram(a[f], input)
-        return ret
-
+def Harmonogram(a, input=None, norm=False):
     if input == 'psd':
-        psd = a
+        size = a.shape[-1]
     else:
-        psd = np.abs(np.fft.fft(a))**2
+        size = a.shape[-1]/2 + 1
+    ret = np.zeros(newshape(a.shape, size))
 
-    hg = np.zeros(len(psd)/2)
-    hg[0] = psd[0]
-    for b in range(1, len(hg)):
-        h = b
-        while h < len(hg):
-            hg[b] += psd[h]
-            h *= 2
+    for i, o in refiter([a, ret], newshape(a.shape)):
+        if input == 'psd':
+            psd = i
+        else:
+            psd = np.abs(np.fft.fft(i))**2
+        o[0] = psd[0]
+        for b in range(1, len(o)):
+            h = b
+            n = 0
+            while h < len(o):
+                o[b] += psd[h]
+                h *= 2
+                n += 1
+            if norm:
+                o[b] /= n
 
-    return hg
+    return ret
 
 
-# Autocorrelation
-#
-# Default is assume framed time samples as input, but input=psd
-# indicates periodogram input
 def Autocorrelation(a, input=None):
-    if a.ndim > 1:
-        ret = np.ndarray(a.shape)
-        for f in range(a.shape[0]):
-            ret[f] = Autocorrelation(a[f], input)
-        return ret
-
+    """
+    Calculate autocorrelation.  Default is assume framed time samples
+    as input, but input=psd indicates periodogram input.  Returns an
+    array of size len(a)/2+1, or len(a) if a is a psd.
+    """
     if input == 'psd':
-        psd = a
+        size = a.shape[-1]
     else:
-        psd = abs(np.fft.fft(a))**2
-    dft = np.fft.ifft(psd)
-    ac = np.real(dft)/a.size
-    return ac
+        size = a.shape[-1]/2 + 1
+    ret = np.ndarray(newshape(a.shape, size))
+
+    for i, o in refiter([a, ret], newshape(a.shape)):
+        if input == 'psd':
+            dpsd = np.append(i, i[-2:0:-1])
+        else:
+            dpsd = abs(np.fft.fft(i))**2
+        dft = np.fft.ifft(dpsd)[:size]
+        o[...] = np.real(dft)/dpsd.size
+    return ret
 
 #
 # All of the methods below actually calculate gain squared
@@ -214,6 +226,7 @@ def ARMatrix(a, order=10, method='matrix'):
     if method == 'matrix':
         Y = Frame(a[:a.size-1], size=order, period=1)
         y = a[order:]
+
         YY = np.dot(Y.T,Y)
         Yy = np.dot(Y.T,y)
         elop = np.dot(linalg.inv(YY), Yy)
@@ -434,8 +447,8 @@ def ARSparse(a, order=10):
         for i in range(len(exn)):
             exn[i] = max(abs(exn[i]),1e-6)
         X = np.diag(1 / np.sqrt(exn[order:]))
-        #gamma = np.sqrt(2)
-        gamma = 2
+        gamma = np.sqrt(2)
+        #gamma = 2
 
     return (coef, gain)
 
@@ -533,8 +546,8 @@ bark = {
     16000: 0.55
 }
 
-# Bilinear transform
-def BilinearWarpOppenheim(a, alpha=0.0, size=None):
+# AllPass transform
+def AllPassWarpOppenheim(a, alpha=0.0, size=None):
     isize = a.shape[a.ndim-1]
     if size is None:
         osize = isize
@@ -544,7 +557,7 @@ def BilinearWarpOppenheim(a, alpha=0.0, size=None):
     if a.ndim > 1:
         ret = np.ndarray((a.shape[0], osize))
         for f in range(a.shape[0]):
-            ret[f] = BilinearWarpOppenheim(a[f], alpha, size)
+            ret[f] = AllPassWarpOppenheim(a[f], alpha, size)
         return ret
     
     # Oppenheim's recursion; very slow
@@ -563,18 +576,18 @@ def BilinearWarpOppenheim(a, alpha=0.0, size=None):
 
     return y
 
-# Bilinear warp of AR coefficients that exclude a[0], i.e., we need to
+# AllPass warp of AR coefficients that exclude a[0], i.e., we need to
 # prepend a 1 for the standard warp to work.
-def ARBilinearWarp(a, g, alpha=0, matrix=None):
+def ARAllPassWarp(a, g, alpha=0, matrix=None):
     if matrix is None:
-        m = BilinearWarpMatrix(a.shape[a.ndim-1]+1, alpha)
+        m = AllPassWarpMatrix(a.shape[a.ndim-1]+1, alpha)
     else:
         m = matrix
     if a.ndim > 1:
         reta = np.ndarray(a.shape)
         retg = np.ndarray(g.shape)
         for f in range(a.shape[0]):
-            reta[f], retg[f] = ARBilinearWarp(a[f], g[f], alpha, m)
+            reta[f], retg[f] = ARAllPassWarp(a[f], g[f], alpha, m)
         return reta, retg
 
     # In the AR case, we need to prepend a 1
@@ -583,8 +596,8 @@ def ARBilinearWarp(a, g, alpha=0, matrix=None):
     wa /= wa[0]
     return -wa[1:], wg
 
-# Bilinear warp of autocorrelation
-def AutocorrelationBilinearWarp(a, alpha=0, size=None, matrix=None):
+# AllPass warp of autocorrelation
+def AutocorrelationAllPassWarp(a, alpha=0, size=None, matrix=None):
 
     # Rows defaults to 
     if size is None:
@@ -594,7 +607,7 @@ def AutocorrelationBilinearWarp(a, alpha=0, size=None, matrix=None):
 
     # Precompute a warping matrix
     if matrix is None:
-        m = BilinearWarpMatrix(a.shape[-1], alpha, rows)
+        m = AllPassWarpMatrix(a.shape[-1], alpha, rows)
     else:
         m = matrix
 
@@ -603,7 +616,7 @@ def AutocorrelationBilinearWarp(a, alpha=0, size=None, matrix=None):
         s[-1] = rows
         reta = np.ndarray(s)
         for f in range(a.shape[0]):
-            reta[f] = AutocorrelationBilinearWarp(a[f], alpha, rows, m)
+            reta[f] = AutocorrelationAllPassWarp(a[f], alpha, rows, m)
         return reta
 
     # So, here is a single autocorrelation
@@ -613,7 +626,7 @@ def AutocorrelationBilinearWarp(a, alpha=0, size=None, matrix=None):
     return wa
 
 # Oppenheim's recursion expressed as a matrix.
-def BilinearWarpMatrix(n, alpha=0.0, size=None):
+def AllPassWarpMatrix(n, alpha=0.0, size=None):
     if size is None:
         rows = n
     else:
@@ -766,7 +779,7 @@ def blackmannuttall(n):
 def gaussian(n, sigma=0.5):
     w = np.zeros(n)
     for i in range(n):
-        w[i] = np.exp(-0.5 * ( (i-(n-1)/2) / (sigma*(n-1)/2) )**2)
+        w[i] = np.exp(-0.5 * ( (i-(n-1)/2.0) / (sigma*(n-1)/2.0) )**2)
     return w
 
 import matplotlib
@@ -792,6 +805,7 @@ class Figure:
         self.next = 1
         self.fig = plt.figure()
 
+    # Plot order: blue, green, red, ...
     def subplot(self):
         if self.next > self.rows * self.cols:
             raise OverflowError('Out of plots')
@@ -825,3 +839,106 @@ def kalman(obs, obsVar, seqVar, initMean, initVar):
         stateVar[i] = J * (seqVar + J * stateVar[i+1])
 
     return stateMean, stateVar
+
+def Argmax(a, loBin=None, hiBin=None):
+    """
+    Finds the index on the maximum value of each array.  Further,
+    ensures that such maxima are not at the borders of the arrays.
+    It's not all that great; might be better to find the first trough
+    first.
+    """
+    if not loBin:
+        loBin = 0
+    if not hiBin:
+        hiBin = a.shape[-1]
+    ret = np.zeros(newshape(a.shape, 1), dtype='int')
+    for i, o in refiter([a, ret], newshape(a.shape)):
+        hi = hiBin
+        lo = loBin
+        m = np.argmax(i[lo:hi])
+        while (m == 0 or m == hi-lo) and lo < hi:
+            if m == 0:
+                lo += 1
+            if m == hi-lo:
+                hi -= 1
+            m = np.argmax(i[lo:hi])
+        o[0] = m + lo
+    return np.squeeze(ret)
+
+def ACPitch(a, loPitch=40, hiPitch=500, r=16000):
+    """
+    Finds the pitch contour.  Input should be framed, but not
+    windowed.
+    """
+    fs = a.shape[-1]
+    loPeriod = 1.0 / loPitch
+    hiPeriod = 1.0 / hiPitch
+    loDFTBin = hertz_to_dftbin(loPitch, fs, r)
+    hiDFTBin = hertz_to_dftbin(hiPitch, fs, r)
+    loACBin = seconds_to_acbin(hiPeriod, r)
+    hiACBin = seconds_to_acbin(loPeriod, r)
+
+    # The AC bin for the period of the lowest frequency needs to be
+    # smaller than the size of the AC.
+    if hiACBin >= fs / 2:
+        print "Frame size {0} too small for pitch {1} Hz".format(fs, loPitch)
+
+    # Basic spectral analysis, windowed, for reference.  Don't do
+    # pre-emphasis; it will break low F0 speakers.
+    win = gaussian(fs)
+    wac = Autocorrelation(win)
+    wac /= wac[0]
+
+    a = ZeroMean(a)
+    w = Window(a, win)
+
+    # Autocorrelation method, loosely after Boersma
+    ac = Autocorrelation(w)
+    for i in range(len(ac)):
+        ac[i] /= ac[i, 0]
+    nac = Divide(ac, wac)
+
+    # Pitch bin is the maximum in each frame
+    m = Argmax(nac, loACBin, hiACBin)
+
+    # Convert to pitch and harmonic noise ratio
+    pitch = np.ndarray(len(m))
+    hnr = np.ndarray(len(m))
+    var = np.ndarray(len(m))
+    prange = hiPitch - loPitch
+    for i in range(len(m)):
+        pitch[i] = 1.0 / acbin_to_seconds(m[i], r)
+        fnac = np.max([nac[i, m[i]], 1e-6])
+        hnr[i] = fnac / (1.0 - fnac)
+        var[i] = (1.0 / hnr[i] * prange)**2
+
+    # Kalman smoother
+    kPitch, kVar = kalman(pitch, var, 1e3, loPitch + prange/2, prange**2)
+
+    # Now run it again, but with tighter limits
+    mpitch = np.mean(kPitch)
+    for i in range(len(nac)):
+        hi = seconds_to_acbin(1.0 / (kPitch[i] * 0.75), r)
+        lo = seconds_to_acbin(1.0 / (kPitch[i] * 1.5), r)
+        rng = hi - lo
+        loBin = np.max([lo, loACBin])
+        hiBin = np.min([hi, hiACBin])
+        m[i] = np.argmax(nac[i, loBin:hiBin]) + loBin
+        pitch[i] = 1.0 / acbin_to_seconds(m[i], r)
+        fnac = np.max([nac[i, m[i]], 1e-6])
+        hnr[i] = fnac / (1.0 - fnac)
+        var[i] = (1.0 / hnr[i] * rng)**2
+    
+    # Kalman smoother again
+    kPitch, kVar = kalman(pitch, var, 1e8, mpitch, prange**2)
+
+    return kPitch, hnr
+
+def OverlapAdd(a):
+    step = a.shape[-1]/2
+    ret = np.zeros(step * (a.shape[0]+1))
+    for i in range(a.shape[0]):
+        x = step*i
+        y = x + 2*step
+        ret[x:y] += a[i]
+    return ret

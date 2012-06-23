@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 #
 # Copyright 2011 by Idiap Research Institute, http://www.idiap.ch
 #
@@ -42,6 +42,9 @@ fs = 512
 fp = 256
 if r == 16000:
     fs = 1024
+    fp = 256
+elif r == 96000:
+    fs = 8192
     fp = 160
 
 loPitch = 40
@@ -61,7 +64,10 @@ print "Period range is bins", loACBin, "to", hiACBin
 # The AC bin for the period of the lowest frequency needs to be
 # smaller than the size of the AC.
 if hiACBin >= fs / 2:
-    print "Frame size {} too small for pitch {} Hz".format(fs, loPitch)
+    print "Frame size {0} too small for pitch {1} Hz".format(fs, loPitch)
+
+# Add noise
+#a += np.random.normal(size=len(a)) * 1e-3
 
 # Basic spectral analysis, windowed, for reference.  Don't do
 # pre-emphasis; it will break low F0 speakers.
@@ -73,19 +79,20 @@ wf = Window(f, w)
 p = Periodogram(wf)
 
 # Plot
-fig = Figure(4,1)
+fig = Figure(5,1)
 pSpec = fig.subplot()
-specplot(pSpec, p[:,:p.shape[1]/2+1], r)
-
+specplot(pSpec, p, r)
+sSpec = fig.subplot()
+specplot(sSpec, p[:,:hertz_to_dftbin(hiPitch, fs, r)], hiPitch*2)
 
 method = Parameter('Method', 'ac')
 
 if method == 'ac':
     if False:
         # Low order AR
-        order = 10
+        order = 3
         a = Autocorrelation(p, 'psd')
-        la, lg = ARLevinson(a, order)
+        la, lg = ARRidge(a, order, ridge=0.8)
         f = ARExcitation(wf, la, lg)
         f = ZeroMean(f)
         p = Periodogram(f)
@@ -97,18 +104,21 @@ if method == 'ac':
     wac = Autocorrelation(w)
     wac /= wac[0]
     nac = Divide(ac, wac)
+    #h = Harmonogram(nac, 'psd', True)
 
-    if False:
+    if True:
         fPlot = fig.subplot()
-        fPlot.set_xlim(0, fs)
+        #fPlot.set_xlim(0, fs)
         frame = Parameter("Frame", 10)
         #fPlot.plot(f[frame], 'r')
-        fPlot.plot(wf[frame], 'g')
-        #fPlot.plot(ac[frame], 'b')
-        #fPlot.plot(nac[frame], 'c')
+        #fPlot.plot(wf[frame], 'g')
+        fPlot.plot(ac[frame], 'b')
+        fPlot.plot(nac[frame], 'c')
+        #fPlot.plot(h[frame], 'r')
 
     # Pitch bin is the maximum in each frame
-    m = np.argmax(nac[:,loACBin:hiACBin], axis=1) + loACBin
+    #m = np.argmax(nac[:,loACBin:hiACBin], axis=1) + loACBin
+    m = Argmax(nac, loACBin, hiACBin)
 
     # Convert to pitch and harmonic noise ratio
     pitch = np.ndarray(len(m))
@@ -117,8 +127,9 @@ if method == 'ac':
     prange = hiPitch - loPitch
     for i in range(len(m)):
         pitch[i] = 1.0 / acbin_to_seconds(m[i], r)
-        hnr[i] = nac[i, m[i]] / (1.0 - nac[i, m[i]])
-        var[i] = (1.0 / hnr[i])**2 * prange**2
+        fnac = np.max([nac[i, m[i]], 1e-6])
+        hnr[i] = fnac / (1.0 - fnac)
+        var[i] = (1.0 / hnr[i] * prange)**2
 
     if False:
         hPlot = fig.subplot()
@@ -128,15 +139,13 @@ if method == 'ac':
         hPlot.set_xlim(0, len(pitch))
         hPlot.set_ylim(0, 5)
 
-    sSpec = fig.subplot()
-    specplot(sSpec, p[:,:hertz_to_dftbin(hiPitch, fs, r)], hiPitch*2)
 
     pPlot = fig.subplot()
     pPlot.plot(pitch, 'r')
 
     # Kalman smoother
     kPitch, kVar = kalman(
-        pitch, var, 1e4, loPitch + prange/2, prange**2
+        pitch, var, 1e3, loPitch + prange/2, prange**2
         )
     stddev = np.sqrt(kVar)
     pPlot.plot(kPitch, 'c')
@@ -155,7 +164,8 @@ if method == 'ac':
         hiBin = np.min([hi, hiACBin])
         m[i] = np.argmax(nac[i, loBin:hiBin]) + loBin
         pitch[i] = 1.0 / acbin_to_seconds(m[i], r)
-        hnr[i] = nac[i, m[i]] / (1.0 - nac[i, m[i]])
+        fnac = np.max([nac[i, m[i]], 1e-6])
+        hnr[i] = fnac / (1.0 - fnac)
         var[i] = (1.0 / hnr[i])**2 * rng**2
     
     sPlot = fig.subplot()
