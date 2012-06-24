@@ -72,10 +72,9 @@ if t == 'arwarp':
 elif t == 'acwarp':
     ac = Autocorrelation(f)
     ac = AutocorrelationAllPassWarp(ac, alpha=mel[r], size=order+1)
-#    wa, wg = ARLevinson(ac, order)
+    wa, wg = ARLevinson(ac, order)
 #    wa, wg = ARRidge(ac, order, ridge=0.1)
 #    wa, wg = ARLasso(ac, order, ridge=10)
-    wa, wg = ARSparse(ac, order)
     lap("AC Warp")
 elif t == 'ridge':
     ac = Autocorrelation(f)

@@ -28,6 +28,7 @@ else:
 
 # Overlap add
 ola = True
+#ola = False
 
 for pair in pairs:
     loadFile, saveFile = pair.strip().split()
@@ -35,65 +36,87 @@ for pair in pairs:
     r, a = WavSource(loadFile)
 
     # Defaults for 8 kHz
-    frameSize = 256
-    framePeriod = 256
-    lpOrder = 10
-
-    if r == 16000:
+    if r == 8000:
+        frameSize = 256
+        framePeriod = 256
+        lpOrder = 10
+    elif r == 16000:
+        framePeriod = 256
         frameSize = 512
-        framePeriod = 512
-        lpOrder = 24
+        pitchSize = 1024
+        lpOrder = 20
+    else:
+        exit
+
     if ola:
-        framePeriod /= 2
+        synthSize = framePeriod * 2
+    else:
+        synthSize = framePeriod
         
     f = Frame(a, size=frameSize, period=framePeriod)
-    hw = np.hanning(frameSize+1)
-    hw = np.delete(hw, -1)
-    w = Window(f, hw)
+    f = ZeroMean(f)
+    aw = np.hanning(frameSize+1)
+    aw = np.delete(aw, -1)
+    w = Window(f, aw)
     ac = Autocorrelation(w)
-    ar, g = ARLevinson(ac, lpOrder)
+    lp = Parameter('AR', 'levinson')
+    if lp == 'levinson':
+        ar, g = ARLevinson(ac, lpOrder)
+    elif lp == 'ridge':
+        ar, g = ARRidge(ac, lpOrder, 0.03)
+    elif lp == 'lasso':
+        ar, g = ARLasso(ac, lpOrder, 10)
+    elif lp == 'sparse':
+        ar, g = ARSparse(f, lpOrder)
 
     # The pitch window should be longer with no sidelobes
-    pf = Frame(a, size=1024, period=framePeriod)
+    pf = Frame(a, size=pitchSize, period=framePeriod)
     pitch, hnr = ACPitch(pf)
 
     ex = Parameter('Excitation', 'synth')
     if ex == 'ar':
         e = ARExcitation(f, ar, g)
-    elif ex == 'random':
+    elif ex == 'noise':
         e = np.random.normal(size=f.shape)
     elif ex == 'robot':
-        ew = np.zeros(a.shape)
+        ew = np.zeros(len(a))
         period = int(1.0 / 200 * r)
         for i in range(0, len(ew), period):
             ew[i] = 1.0
-        e = Frame(ew, size=frameSize, period=framePeriod)        
+        e = Frame(ew, size=synthSize, period=framePeriod)        
     elif ex == 'synth':
-        ew = np.zeros(a.shape)
+        # Harmonic part
+        h = np.zeros(len(a))
         i = 0
         frame = 0
         while i < len(a) and frame < len(pitch):
             period = int(1.0 / pitch[frame] * r)
             #period = int(1.0 / 200 * r)
-            ew[i] = np.sqrt(hnr[frame] / (hnr[frame] + 1)) * period
+            weight = np.sqrt(hnr[frame] / (hnr[frame] + 1) * period)
+            h[i] = weight
             i += period
             frame = i // framePeriod
-        e = Frame(ew, size=frameSize, period=framePeriod)
-        pitchCorrection = 1
-        for i in range(len(e)):
-            e[i] += np.random.normal(size=frameSize) * \
-                    np.sqrt(1.0 / (hnr[i] + 1)) / pitchCorrection
-        e *= pitchCorrection
-        
-    e = Window(e, hw)
+        fh = Frame(h, size=synthSize, period=framePeriod)
+
+        # Noise part
+        n = np.random.normal(size=len(a))
+        fn = Frame(n, size=synthSize, period=framePeriod)
+        for i in range(len(fn)):
+            fn[i] *= np.sqrt(1.0 / (hnr[i] + 1))
+        e = fn + fh*3
+
+    sw = np.hanning(synthSize+1)
+    sw = np.delete(sw, -1)
+
+    #e = Window(e, sw)
     s = ARResynthesis(e, ar, g)
     print "wav: ", saveFile
     if ola:
-        #s = Window(s, hw)
+        s = Window(s, sw)
         s = OverlapAdd(s)
-        WavSink(s, saveFile, r)
+        WavSink(s.flatten('C'), saveFile, r)
     else:
-        WavSink(s.flatten('A'), saveFile, r)
+        WavSink(e.flatten('C') / 1000, saveFile, r)
 
 if False:
     fig = Figure(5, 1)

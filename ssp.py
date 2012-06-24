@@ -224,7 +224,7 @@ def ARMatrix(a, order=10, method='matrix'):
     # Follow the matrix based method to the letter.  elop contains the
     # poles reversed, coef is the poles in order.
     if method == 'matrix':
-        Y = Frame(a[:a.size-1], size=order, period=1)
+        Y = Frame(a[:a.size-1], size=order, period=1, pad=False)
         y = a[order:]
 
         YY = np.dot(Y.T,Y)
@@ -435,7 +435,7 @@ def ARSparse(a, order=10):
     gamma = 1
     X = np.identity(len(a)-order)
     for iter in range(5):
-        Y = np.dot(X, Frame(a[:a.size-1], size=order, period=1))
+        Y = np.dot(X, Frame(a[:a.size-1], size=order, period=1, pad=False))
         y = np.dot(X, a[order:])
         YY = np.dot(Y.T,Y)
         Yy = np.dot(Y.T,y)
