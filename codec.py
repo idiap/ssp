@@ -14,6 +14,7 @@ op.add_option("-f", dest="fileList", help="List of input output file pairs")
 
 # SSP import
 from ssp import *
+import scipy.signal as ss
 
 # Fall back on command line input and output
 pairs = []
@@ -29,6 +30,7 @@ else:
 # Overlap add
 ola = True
 #ola = False
+pz = False
 
 for pair in pairs:
     loadFile, saveFile = pair.strip().split()
@@ -44,17 +46,26 @@ for pair in pairs:
         framePeriod = 256
         frameSize = 512
         pitchSize = 1024
-        lpOrder = 20
+        lpOrder = 24
     else:
         exit
 
     if ola:
         synthSize = framePeriod * 2
     else:
+        frameSize = framePeriod
         synthSize = framePeriod
         
+    # First the pitch as it's on the unaltered waveform.  The window
+    # should be long with no sidelobes.
+    pf = Frame(a, size=pitchSize, period=framePeriod)
+    pitch, hnr = ACPitch(pf)
+
+    # Now mess with with pre-emphasis and the like for the LP
+    if pz:
+        a = ZeroMean(np.array(a))
+        a = PoleFilter(a, 1.0)
     f = Frame(a, size=frameSize, period=framePeriod)
-    f = ZeroMean(f)
     aw = np.hanning(frameSize+1)
     aw = np.delete(aw, -1)
     w = Window(f, aw)
@@ -69,10 +80,6 @@ for pair in pairs:
     elif lp == 'sparse':
         ar, g = ARSparse(f, lpOrder)
 
-    # The pitch window should be longer with no sidelobes
-    pf = Frame(a, size=pitchSize, period=framePeriod)
-    pitch, hnr = ACPitch(pf)
-
     ex = Parameter('Excitation', 'synth')
     if ex == 'ar':
         e = ARExcitation(f, ar, g)
@@ -82,29 +89,50 @@ for pair in pairs:
         ew = np.zeros(len(a))
         period = int(1.0 / 200 * r)
         for i in range(0, len(ew), period):
-            ew[i] = 1.0
+            ew[i] = period
         e = Frame(ew, size=synthSize, period=framePeriod)        
     elif ex == 'synth':
         # Harmonic part
+        mperiod = int(1.0 / np.mean[pitch] * r)
+        ptype = Parameter('Pulse', 'impulse')
+        pr, pg = pulse_response(ptype, period=mperiod, order=lpOrder)
         h = np.zeros(len(a))
         i = 0
         frame = 0
         while i < len(a) and frame < len(pitch):
             period = int(1.0 / pitch[frame] * r)
-            #period = int(1.0 / 200 * r)
+            if i + period > len(a):
+                break
             weight = np.sqrt(hnr[frame] / (hnr[frame] + 1) * period)
-            h[i] = weight
+            h[i:i+period] = pulse(period, ptype) * weight
             i += period
             frame = i // framePeriod
+        h = ARExcitation(h, pr, 1.0)
         fh = Frame(h, size=synthSize, period=framePeriod)
 
         # Noise part
+        n = np.random.normal(size=len(a))
+        fn = Frame(ZeroFilter(n, 1.0), size=synthSize, period=framePeriod)
+        for i in range(len(fn)):
+            fn[i] *= np.sqrt(1.0 / (hnr[i] + 1))
+        e = fn + fh*10
+    elif ex == 'sine':
+        order = 20
+        sine = Harmonics(r, order)
+        h = np.zeros(len(a))
+        for i in range(0, len(h)-framePeriod, framePeriod):
+            frame = i // framePeriod
+            period = int(1.0 / pitch[frame] * r)
+            weight = np.sqrt(hnr[frame] / (hnr[frame] + 1))
+            h[i:i+framePeriod] = sine.sample(pitch[frame], framePeriod) * weight
+        fh = Frame(h, size=synthSize, period=framePeriod)
         n = np.random.normal(size=len(a))
         fn = Frame(n, size=synthSize, period=framePeriod)
         for i in range(len(fn)):
             fn[i] *= np.sqrt(1.0 / (hnr[i] + 1))
         e = fn + fh*3
-
+    else:
+        exit
     sw = np.hanning(synthSize+1)
     sw = np.delete(sw, -1)
 
@@ -114,9 +142,11 @@ for pair in pairs:
     if ola:
         s = Window(s, sw)
         s = OverlapAdd(s)
+        if pz:
+            s = ZeroFilter(s, 1.0)
         WavSink(s.flatten('C'), saveFile, r)
     else:
-        WavSink(e.flatten('C') / 1000, saveFile, r)
+        WavSink(e.flatten('C') / framePeriod, saveFile, r)
 
 if False:
     fig = Figure(5, 1)

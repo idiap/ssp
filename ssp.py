@@ -1,4 +1,3 @@
-#!/usr/bin/python2
 #
 # Copyright 2011 by Idiap Research Institute, http://www.idiap.ch
 #
@@ -117,6 +116,18 @@ def ZeroFilter(a, zero=0.97):
         store = a[i]
     return filter
 
+def PoleFilter(a, pole=0.97):
+    """
+    Single pole filter
+    """
+    filter = np.zeros(a.size)
+    store = 0.0
+    for i in range(a.size):
+        filter[i] = a[i] + pole * store
+        store = filter[i]
+    return filter
+    
+
 # Convert array to framed array
 # The opposite of this for size = period is a.flatten
 def Frame(a, size=512, period=256, pad=True):
@@ -150,8 +161,8 @@ def Norm(a, L=2):
 # Zero mean a framed signal
 def ZeroMean(a):
     ret = np.ndarray(a.shape)
-    for r in range(a.shape[0]):
-        ret[r] = a[r] - np.mean(a[r])
+    for i, o in refiter([a, ret], newshape(a.shape)):
+        o[...] = i - np.mean(i)
     return ret
 
 def Periodogram(a):
@@ -915,7 +926,9 @@ def ACPitch(a, loPitch=40, hiPitch=500, r=16000):
     # Kalman smoother
     kPitch, kVar = kalman(pitch, var, 1e3, loPitch + prange/2, prange**2)
 
-    # Now run it again, but with tighter limits
+    # Now run it again, but with tighter limits.  Note that nac can be
+    # less than zero any time, and greater than one depending upon
+    # floating accuracy.
     mpitch = np.mean(kPitch)
     for i in range(len(nac)):
         hi = seconds_to_acbin(1.0 / (kPitch[i] * 0.75), r)
@@ -926,6 +939,7 @@ def ACPitch(a, loPitch=40, hiPitch=500, r=16000):
         m[i] = np.argmax(nac[i, loBin:hiBin]) + loBin
         pitch[i] = 1.0 / acbin_to_seconds(m[i], r)
         fnac = np.max([nac[i, m[i]], 1e-6])
+        fnac = np.min([fnac, 1.0 - 1e-6])
         hnr[i] = fnac / (1.0 - fnac)
         var[i] = (1.0 / hnr[i] * rng)**2
     
@@ -942,3 +956,83 @@ def OverlapAdd(a):
         y = x + 2*step
         ret[x:y] += a[i]
     return ret
+
+class Harmonics():
+    def __init__(self, rate, order):
+        self.rate = float(rate)
+        self.order = order
+        self.phase = 0.0
+        self.twopi = 2.0 * np.pi
+
+    def sample(self, freq, n):
+        phi = np.ndarray((self.order, n))
+        ret = np.ndarray((n))
+        for i in range(n):
+            ph = freq / self.rate * self.twopi
+            fphi = self.phase + ph * i
+            for l in range(self.order):
+                phi[l, i] = fphi * (l+1)
+        self.phase = phi[0, -1]
+        if self.phase > self.twopi:
+            self.phase = self.phase % self.twopi
+
+        phi = np.cos(phi) / self.order * np.sqrt(2)
+        for i in range(self.order):
+            phi[i] *= 2.0 - 2.0 * i / self.order
+        return phi.sum(axis=0)
+
+def pulse(n, ptype='impulse'):
+    pulse = np.zeros((n))
+    T = float(n)
+    if ptype == 'impulse':
+        pulse[T/2] = 1
+    elif ptype == 'poly':
+        Tp = int(T * 0.4)
+        Tn = int(T * 0.16)
+        for i in range(Tp):
+            t = float(i)
+            pulse[i] = 3.0*(t/Tp)**2 - 2.0*(t/Tp)**3
+        for i in range(Tn):
+            t = float(i)
+            pulse[i+Tp] = 1.0 - (t/Tn)**2
+    elif ptype == 'trig':
+        Tp = int(T * 0.4)
+        Tn = int(T * 0.16)
+        for i in range(Tp):
+            t = float(i)
+            pulse[i] = 0.5*(1.0-np.cos(np.pi*t/Tp))
+        for i in range(Tn):
+            t = float(i)
+            pulse[i+Tp] = np.cos(t/Tn * np.pi/2)
+    elif ptype == 'gamma':
+        alpha = 3
+        beta  = 0.1/(alpha-1)
+        pulse = np.ndarray((T))
+        for i in range(int(T)):
+            t = 1.0-float(i)/T
+            pulse[i] = np.exp((alpha-1.0)*np.log(t) - t/beta)
+    elif ptype == 'igamma':
+        alpha = 0.1
+        beta  = 0.16*(alpha+1)
+        pulse = np.ndarray((T))
+        for i in range(int(T)):
+            t = 1.0-float(i)/T
+            pulse[i] = np.exp(-(alpha+1.0)*np.log(t) - beta/t)
+    else:
+        raise LookupError('Unknown pulse type')
+
+    if ptype != 'impulse':
+        pulse = ZeroFilter(pulse)
+        pulse /= linalg.norm(pulse)
+
+    return pulse
+
+def pulse_response(ptype='impulse', period=100, order=18):
+    # Build a pulse train and find the autocorrelation
+    w = 1024
+    p = pulse(period, ptype)
+    p = np.tile(p, w/period+1)
+    p = Window(p[:w], np.hanning(w))
+    ac = Autocorrelation(p)
+    a, g = ARLevinson(ac, order=order)
+    return a, g
