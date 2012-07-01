@@ -981,7 +981,7 @@ class Harmonics():
             phi[i] *= 2.0 - 2.0 * i / self.order
         return phi.sum(axis=0)
 
-def pulse(n, ptype='impulse'):
+def pulse(n, ptype='impulse', derivative=True):
     pulse = np.zeros((n))
     T = float(n)
     if ptype == 'impulse':
@@ -1005,24 +1005,41 @@ def pulse(n, ptype='impulse'):
             t = float(i)
             pulse[i+Tp] = np.cos(t/Tn * np.pi/2)
     elif ptype == 'gamma':
-        alpha = 3
-        beta  = 0.1/(alpha-1)
+        alpha = 2
+        beta  = 0.5/(alpha-1)
         pulse = np.ndarray((T))
         for i in range(int(T)):
             t = 1.0-float(i)/T
             pulse[i] = np.exp((alpha-1.0)*np.log(t) - t/beta)
     elif ptype == 'igamma':
-        alpha = 0.1
+        alpha = 10
         beta  = 0.16*(alpha+1)
         pulse = np.ndarray((T))
         for i in range(int(T)):
             t = 1.0-float(i)/T
             pulse[i] = np.exp(-(alpha+1.0)*np.log(t) - beta/t)
+    elif ptype == 'lf':
+        Tp = 0.6 * T
+        Te = Tp + 0.1 * T
+        Ta = 0.15 * T
+        alpha = 15.0/T
+        omega = np.pi / Tp
+        for i in range(int(Te)):
+            t = float(i)
+            pulse[i] = (
+                -1.0 / np.sin(omega*Te) * np.exp(alpha*(t-Te)) * np.sin(omega*t)
+                 )
+        for i in range(int(Te), n):
+            t = float(i)
+            pulse[i] = (
+                -(np.exp(-(t-Te)/Ta) - np.exp(-(T-Te)/Ta))
+                )
     else:
-        raise LookupError('Unknown pulse type')
+        raise LookupError('Unknown pulse type ' + ptype)
 
     if ptype != 'impulse':
-        pulse = ZeroFilter(pulse)
+        if derivative and ptype != 'lf':
+            pulse = ZeroFilter(pulse)
         pulse /= linalg.norm(pulse)
 
     return pulse

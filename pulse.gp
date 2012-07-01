@@ -21,6 +21,9 @@ ia = 4
 iB = 0.1*(ia+1)
 ig(t) = exp(-(ia+1)*log(1.0-t) - iB/(1.0-t))
 
+# LF
+
+
 plot p1(x), p2(x), t1(x), t2(x), \
      g(x) / g(1.0-gB*(ga-1)), \
      ig(x) / ig(1.0-iB/(ia+1))

@@ -93,7 +93,7 @@ for pair in pairs:
         e = Frame(ew, size=synthSize, period=framePeriod)        
     elif ex == 'synth':
         # Harmonic part
-        mperiod = int(1.0 / np.mean[pitch] * r)
+        mperiod = int(1.0 / np.mean(pitch) * r)
         ptype = Parameter('Pulse', 'impulse')
         pr, pg = pulse_response(ptype, period=mperiod, order=lpOrder)
         h = np.zeros(len(a))
@@ -115,7 +115,7 @@ for pair in pairs:
         fn = Frame(ZeroFilter(n, 1.0), size=synthSize, period=framePeriod)
         for i in range(len(fn)):
             fn[i] *= np.sqrt(1.0 / (hnr[i] + 1))
-        e = fn + fh*10
+        e = fn + fh*5
     elif ex == 'sine':
         order = 20
         sine = Harmonics(r, order)
@@ -130,7 +130,7 @@ for pair in pairs:
         fn = Frame(n, size=synthSize, period=framePeriod)
         for i in range(len(fn)):
             fn[i] *= np.sqrt(1.0 / (hnr[i] + 1))
-        e = fn + fh*3
+        e = fn + fh*10
     else:
         exit
     sw = np.hanning(synthSize+1)
