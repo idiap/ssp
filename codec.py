@@ -103,7 +103,7 @@ for pair in pairs:
             period = int(1.0 / pitch[frame] * r)
             if i + period > len(a):
                 break
-            weight = np.sqrt(hnr[frame] / (hnr[frame] + 1) * period)
+            weight = np.sqrt(hnr[frame] / (hnr[frame] + 1))
             h[i:i+period] = pulse(period, ptype) * weight
             i += period
             frame = i // framePeriod
@@ -115,7 +115,7 @@ for pair in pairs:
         fn = Frame(ZeroFilter(n, 1.0), size=synthSize, period=framePeriod)
         for i in range(len(fn)):
             fn[i] *= np.sqrt(1.0 / (hnr[i] + 1))
-        e = fn + fh*5
+        e = fn + fh*20
     elif ex == 'sine':
         order = 20
         sine = Harmonics(r, order)

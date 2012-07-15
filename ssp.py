@@ -981,8 +981,9 @@ class Harmonics():
             phi[i] *= 2.0 - 2.0 * i / self.order
         return phi.sum(axis=0)
 
-def pulse(n, ptype='impulse', derivative=True):
+def pulse(n, ptype='impulse', derivative=True, rate=16000.0):
     pulse = np.zeros((n))
+    T0 = n/float(rate) # Fundamental period in seconds
     T = float(n)
     if ptype == 'impulse':
         pulse[T/2] = 1
@@ -1005,43 +1006,65 @@ def pulse(n, ptype='impulse', derivative=True):
             t = float(i)
             pulse[i+Tp] = np.cos(t/Tn * np.pi/2)
     elif ptype == 'gamma':
-        alpha = 2
-        beta  = 0.5/(alpha-1)
-        pulse = np.ndarray((T))
-        for i in range(int(T)):
-            t = 1.0-float(i)/T
+        Rg = 1.2
+        Rk = 0.3
+        Tp = T/(2.0*Rg)
+        Te = Tp*(Rk+1.0)
+        alpha = 3.0
+        beta  = 0.16/(alpha-1)
+        for i in range(int(Te)):
+            t = 1.0-float(i)/Te
             pulse[i] = np.exp((alpha-1.0)*np.log(t) - t/beta)
     elif ptype == 'igamma':
         alpha = 10
         beta  = 0.16*(alpha+1)
-        pulse = np.ndarray((T))
         for i in range(int(T)):
             t = 1.0-float(i)/T
             pulse[i] = np.exp(-(alpha+1.0)*np.log(t) - beta/t)
     elif ptype == 'lf':
-        Tp = 0.6 * T
-        Te = Tp + 0.1 * T
-        Ta = 0.15 * T
-        alpha = 15.0/T
+        # Assume Ee = -1 and T = 1
+        if True:
+            # Male
+            Fa = 700 # Hz
+            Rg = 1.2
+            Rk = 0.3
+        else:
+            # Female - lengthen things
+            Fa = 400 # Hz
+            Rg = 1.0
+            Rk = 0.3
+
+        # These are all in seconds
+        Ta = 1.0/(2.0*np.pi*Fa)
+        Tp = T0/(2.0*Rg)
+        Te = Tp*(Rk+1.0)
+
+        eps = lf_epsilon(Te, Ta, T0)
+        alpha = lf_alpha(Tp, Te, eps, T0)
         omega = np.pi / Tp
-        for i in range(int(Te)):
-            t = float(i)
-            pulse[i] = (
-                -1.0 / np.sin(omega*Te) * np.exp(alpha*(t-Te)) * np.sin(omega*t)
-                 )
-        for i in range(int(Te), n):
-            t = float(i)
-            pulse[i] = (
-                -(np.exp(-(t-Te)/Ta) - np.exp(-(T-Te)/Ta))
+        for i in range(int(Te/T0*n+0.5)):
+            t = float(i)/n*T0
+            pulse[i] = -(
+                np.exp(alpha*t)  * np.sin(omega*t) /
+                np.exp(alpha*Te) / np.sin(omega*Te)
                 )
+        if True:
+            for i in range(int(Te/T0*n+0.5), n):
+                t = float(i)/n*T0
+                pulse[i] = -(
+                    (np.exp(-(t-Te)*eps) - np.exp(-(T0-Te)*eps)) /
+                    (1.0 - np.exp(-(T0-Te)*eps))
+                    )
     else:
         raise LookupError('Unknown pulse type ' + ptype)
 
     if ptype != 'impulse':
         if derivative and ptype != 'lf':
             pulse = ZeroFilter(pulse)
-        pulse /= linalg.norm(pulse)
 
+    # We want the total power in the pulse to average one for each
+    # sample, so the power is the length of the pulse
+    pulse *= np.sqrt(T) / linalg.norm(pulse)
     return pulse
 
 def pulse_response(ptype='impulse', period=100, order=18):
@@ -1053,3 +1076,38 @@ def pulse_response(ptype='impulse', period=100, order=18):
     ac = Autocorrelation(p)
     a, g = ARLevinson(ac, order=order)
     return a, g
+
+def lf_alpha(tp, te, epsilon, T0, alpha=0.0):
+    """
+    Given the three timing parameters and a starting point, uses
+    Newton-Raphson to find a value of alpha for the Liljencrants-Fant
+    glottal pulse shape.
+    """
+    tc = T0
+    omega = np.pi / tp
+    for iter in range(5):
+        exp = np.exp(-epsilon*(tc-te))
+        esin = np.exp(alpha*te)*np.sin(omega*te)
+        f = (
+            alpha
+            - omega/np.tan(omega*te)
+            + omega/esin
+            -(alpha**2 + omega**2)*((tc-te)*exp/(1.0-exp) - 1.0/epsilon)
+            )
+        fd = (
+            1.0
+            - omega*te/esin
+            -2.0*alpha*((tc-te)*exp/(1.0-exp) - 1.0/epsilon)
+            )
+        alpha -= f/fd
+    return alpha
+
+def lf_epsilon(te, ta, T0):
+    tce = T0 - te
+    epsilon = 1.0/ta
+    for iter in range(5):
+        f = 1.0 - np.exp(-epsilon * tce) - ta * epsilon
+        fd = tce * np.exp(-epsilon * tce) - ta
+        epsilon -= f/fd
+        
+    return epsilon
