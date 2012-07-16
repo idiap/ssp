@@ -361,7 +361,7 @@ def ARSpectrum(a, g, nSpec=256, twiddle=None):
         twiddle = np.ndarray((nSpec,a.shape[a.ndim-1]), dtype='complex')
         for i in range(nSpec):
             for j in range(twiddle.shape[1]):
-                twiddle[i,j] = np.exp(-1j * np.pi * i * (j+1) / nSpec)
+                twiddle[i,j] = np.exp(-1.j * np.pi * i * (j+1) / nSpec)
     if a.ndim > 1:
         ret = np.ndarray((a.shape[0], nSpec))
         for f in range(a.shape[0]):
@@ -371,7 +371,7 @@ def ARSpectrum(a, g, nSpec=256, twiddle=None):
     spec = np.ndarray(nSpec)
     for i in range(nSpec):
         sm = np.dot(a,twiddle[i])
-        spec[i] = g / abs(1 - sm)**2
+        spec[i] = g / abs(1.0 - sm)**2
     return spec
 
 # AR cepstrum
@@ -464,11 +464,11 @@ def ARSparse(a, order=10):
     return (coef, gain)
 
 # Solve polynomial corresponding to AR solution
-def ARPoly(a):
+def ARRoots(a):
     if a.ndim > 1:
         ret = np.ndarray(a.shape, dtype='complex')
         for f in range(a.shape[0]):
-            ret[f] = ARPoly(a[f])
+            ret[f] = ARRoots(a[f])
         return ret
 
     # The refection coeffs are negative, so insert -1 and assume that
@@ -537,6 +537,34 @@ def ARLogLikelihoodRatio(a, order=10):
     llLaplace = -gamma * np.sum(np.abs(exn))
     
     return llLaplace - np.logaddexp(llLaplace, llGauss)
+
+import numpy.polynomial as pn
+
+def ARHarmonicPoly(f0, rate, mag=0.99):
+    """
+    Generates coefficients of an AR polynomial corresponding to a
+    harmonic excitation at frequency f0
+    """
+    omega = float(f0)/rate * 2.0 * np.pi
+    n = int(np.pi / omega)
+    roots = np.ndarray((n*2), dtype='complex')
+    for i in range(n):
+        a = omega * (i+1)
+        c = mag*np.cos(a)
+        s = mag*np.sin(a)
+        roots[i*2] = complex(c, s)
+        roots[i*2+1] = complex(c, -s)
+
+    # polyfromroots() returns the trailing coeff = 1, so just knock
+    # off that one and reverse the rest as we have negative powers.
+    if False:
+        poly = np.poly(roots)[1:]
+    else:
+        poly = pn.polyfromroots(roots).real[-2::-1]
+    if np.max(np.abs(poly)) >= 1.0:
+        print roots, np.prod(roots), poly
+        raise OverflowError('Poly too big')
+    return -poly
 
 
 # Alpha values for mel scale at various frequencies

@@ -131,6 +131,26 @@ for pair in pairs:
         for i in range(len(fn)):
             fn[i] *= np.sqrt(1.0 / (hnr[i] + 1))
         e = fn + fh*10
+    elif ex == 'holp':
+        # Some noise
+        n = np.random.normal(size=len(a))
+        fn = Frame(n, size=synthSize, period=framePeriod)
+
+        # Use the noise to excite a high order AR model
+        fh = np.ndarray(fn.shape)
+        for i in range(len(fn)):
+            hoar = ARHarmonicPoly(pitch[i], r, 0.7)
+            fh[i] = ARResynthesis(fn[i], hoar, 1.0 / linalg.norm(hoar)**2)
+            print i, pitch[i], linalg.norm(hoar), np.min(fh[i]), np.max(fh[i])
+            print ' ', np.min(hoar), np.max(hoar)
+            # fh[i] *= np.sqrt(r / pitch[i]) / linalg.norm(fh[i])
+            # fh[i] *= np.sqrt(hnr[i] / (hnr[i] + 1))
+
+        # Weight the noise as for the other methods
+        for i in range(len(fn)):
+            fn[i] *= np.sqrt(1.0 / (hnr[i] + 1))
+        e = fh # fn + fh*30
+        
     else:
         exit
     sw = np.hanning(synthSize+1)
