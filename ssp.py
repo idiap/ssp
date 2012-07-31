@@ -702,10 +702,9 @@ parmKind = {
 }
 
 # Sink to HTK file
-from struct import pack
+from struct import pack, unpack
 from os import makedirs
 from os.path import dirname, exists
-import array
 def HTKSink(fileName, a, period=0.01, kind="USER"):
     if (a.ndim != 2):
         print "Dimension must be 2"
@@ -717,15 +716,28 @@ def HTKSink(fileName, a, period=0.01, kind="USER"):
     htkPeriod = period * 1e7 + 0.5
     header = pack('>iihh', a.shape[0], htkPeriod, a.shape[1]*4, htkKind)
 
-    # Need to convert ndarray to array to write as 4 byte.  You'd
-    # think ndarray.tofile would do that, but it just casts to double.
     dir = dirname(fileName)
     if dir and not exists(dir):
         makedirs(dir)
     with open(fileName, 'wb') as f:
+        # Need to create a new array here of type float32 ('f') such
+        # that it is written as 4 bytes.  Casting doesn't seem to
+        # work.
         f.write(header)
         v = np.array(a, dtype='f').byteswap()
         v.tofile(f)
+
+# Source from HTK file
+def HTKSource(fileName):
+    with open(fileName, 'r') as f:
+        # The resulting array here is float32.  We could explicitly
+        # cast it to double, but that will happen further up in the
+        # program anyway.
+        header = f.read(12)
+        (htkSize, htkPeriod, htkVecSize, htkKind) = unpack('>iihh', header)
+        data = np.fromfile(f, dtype='f')
+        a = data.reshape((htkSize, htkVecSize / 4)).byteswap()
+    return a, htkPeriod * 1e-7
 
 # Calculate mean; typically cepstral, but it doesn't matter here
 def Mean(a):
@@ -972,7 +984,8 @@ def ACPitch(a, loPitch=40, hiPitch=500, r=16000):
         var[i] = (1.0 / hnr[i] * rng)**2
     
     # Kalman smoother again
-    kPitch, kVar = kalman(pitch, var, 1e8, mpitch, prange**2)
+    # 1e4 is about right for < 10ms frame shift.  It was 1e8 for ~25ms
+    kPitch, kVar = kalman(pitch, var, 1e4, mpitch, prange**2)
 
     return kPitch, hnr
 

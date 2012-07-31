@@ -42,7 +42,7 @@ fs = 512
 fp = 256
 if r == 16000:
     fs = 1024
-    fp = 256
+    fp = 128
 elif r == 96000:
     fs = 8192
     fp = 160
@@ -174,7 +174,7 @@ if method == 'ac':
 
     # Kalman smoother again
     kPitch, kVar = kalman(
-        pitch, var, 1e8, mpitch, prange**2
+        pitch, var, 1e4, mpitch, prange**2
         )
     stddev = np.sqrt(kVar)
     sPlot.plot(kPitch, 'c')

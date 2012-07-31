@@ -7,14 +7,23 @@
 # Author(s):
 #   Phil Garner, May 2012
 #
-from optparse import OptionParser
-op = OptionParser()
-op.add_option("-f", dest="fileList", help="List of input output file pairs")
-(opt, arg) = op.parse_args()
-
-# SSP import
 from ssp import *
-import scipy.signal as ss
+from optparse import OptionParser
+from os.path import splitext
+
+# Command line
+op = OptionParser(usage="usage: %prog [options] [inFile outFile]")
+op.add_option("-r", dest="rate", default=16000,
+              help="Sample rate")
+op.add_option("-f", dest="fileList",
+              help="List of input output file pairs")
+op.add_option("-e", dest="encode", action="store_true", default=False,
+              help="Encode source files")
+op.add_option("-d", dest="decode", action="store_true", default=False,
+              help="Decode source files")
+op.add_option("-x", dest="ola", action="store_false", default=True,
+              help="Don't use OLA")
+(opt, arg) = op.parse_args()
 
 # Fall back on command line input and output
 pairs = []
@@ -27,58 +36,75 @@ else:
         exit(1)
     pairs = [ ' '.join(arg) ]
 
-# Overlap add
-ola = True
-#ola = False
 pz = False
 
-for pair in pairs:
-    loadFile, saveFile = pair.strip().split()
-    print "wav: ", loadFile
-    r, a = WavSource(loadFile)
+# Sample rate specific default parameters
+framePeriod = {
+    8000: 128,
+    16000: 128
+}
 
-    # Defaults for 8 kHz
-    if r == 8000:
-        frameSize = 256
-        framePeriod = 256
-        lpOrder = 10
-    elif r == 16000:
-        framePeriod = 256
-        frameSize = 512
-        pitchSize = 1024
-        lpOrder = 24
-    else:
-        exit
+lpOrder = {
+    8000: 10,
+    16000: 24
+}
 
-    if ola:
-        synthSize = framePeriod * 2
+def encode(a):
+    """
+    Encode a speech waveform
+    """
+    if opt.ola:
+        frameSize = framePeriod[r] * 2
     else:
-        frameSize = framePeriod
-        synthSize = framePeriod
-        
-    # First the pitch as it's on the unaltered waveform.  The window
-    # should be long with no sidelobes.
-    pf = Frame(a, size=pitchSize, period=framePeriod)
+        frameSize = framePeriod[r]
+
+    # First the pitch as it's on the unaltered waveform.  The frame
+    # should be long with no window.
+    pitchSize = 1024
+    pf = Frame(a, size=pitchSize, period=framePeriod[r])
     pitch, hnr = ACPitch(pf)
 
     # Now mess with with pre-emphasis and the like for the LP
     if pz:
         a = ZeroMean(np.array(a))
         a = PoleFilter(a, 1.0)
-    f = Frame(a, size=frameSize, period=framePeriod)
+    f = Frame(a, size=frameSize, period=framePeriod[r])
     aw = np.hanning(frameSize+1)
     aw = np.delete(aw, -1)
     w = Window(f, aw)
     ac = Autocorrelation(w)
     lp = Parameter('AR', 'levinson')
     if lp == 'levinson':
-        ar, g = ARLevinson(ac, lpOrder)
+        ar, g = ARLevinson(ac, lpOrder[r])
     elif lp == 'ridge':
-        ar, g = ARRidge(ac, lpOrder, 0.03)
+        ar, g = ARRidge(ac, lpOrder[r], 0.03)
     elif lp == 'lasso':
-        ar, g = ARLasso(ac, lpOrder, 10)
+        ar, g = ARLasso(ac, lpOrder[r], 10)
     elif lp == 'sparse':
-        ar, g = ARSparse(f, lpOrder)
+        ar, g = ARSparse(f, lpOrder[r])
+
+    if False:
+        fig = Figure(5, 1)
+        #stddev = np.sqrt(kVar)
+        sPlot = fig.subplot()
+        sPlot.plot(pitch, 'c')
+        #sPlot.plot(kPitch + stddev, 'b')
+        #sPlot.plot(kPitch - stddev, 'b')
+        sPlot.set_xlim(0, len(pitch))
+        sPlot.set_ylim(0, 500)
+        plt.show()
+
+    return (ar, g, pitch, hnr)
+
+
+def decode((ar, g, pitch, hnr)):
+    """
+    Decode a speech waveform
+    """
+    if opt.ola:
+        frameSize = framePeriod[r] * 2
+    else:
+        frameSize = framePeriod[r]
 
     ex = Parameter('Excitation', 'synth')
     if ex == 'ar':
@@ -90,12 +116,12 @@ for pair in pairs:
         period = int(1.0 / 200 * r)
         for i in range(0, len(ew), period):
             ew[i] = period
-        e = Frame(ew, size=synthSize, period=framePeriod)        
+        e = Frame(ew, size=frameSize, period=framePeriod[r])        
     elif ex == 'synth':
         # Harmonic part
         mperiod = int(1.0 / np.mean(pitch) * r)
         ptype = Parameter('Pulse', 'impulse')
-        pr, pg = pulse_response(ptype, period=mperiod, order=lpOrder)
+        pr, pg = pulse_response(ptype, period=mperiod, order=lpOrder[r])
         h = np.zeros(len(a))
         i = 0
         frame = 0
@@ -106,35 +132,35 @@ for pair in pairs:
             weight = np.sqrt(hnr[frame] / (hnr[frame] + 1))
             h[i:i+period] = pulse(period, ptype) * weight
             i += period
-            frame = i // framePeriod
+            frame = i // framePeriod[r]
         h = ARExcitation(h, pr, 1.0)
-        fh = Frame(h, size=synthSize, period=framePeriod)
+        fh = Frame(h, size=frameSize, period=framePeriod[r])
 
         # Noise part
         n = np.random.normal(size=len(a))
-        fn = Frame(ZeroFilter(n, 1.0), size=synthSize, period=framePeriod)
+        fn = Frame(ZeroFilter(n, 1.0), size=frameSize, period=framePeriod[r])
         for i in range(len(fn)):
             fn[i] *= np.sqrt(1.0 / (hnr[i] + 1))
-        e = fn + fh*20
+        e = fn + fh
     elif ex == 'sine':
         order = 20
         sine = Harmonics(r, order)
         h = np.zeros(len(a))
-        for i in range(0, len(h)-framePeriod, framePeriod):
-            frame = i // framePeriod
+        for i in range(0, len(h)-framePeriod[r], framePeriod[r]):
+            frame = i // framePeriod[r]
             period = int(1.0 / pitch[frame] * r)
             weight = np.sqrt(hnr[frame] / (hnr[frame] + 1))
-            h[i:i+framePeriod] = sine.sample(pitch[frame], framePeriod) * weight
-        fh = Frame(h, size=synthSize, period=framePeriod)
+            h[i:i+framePeriod[r]] = sine.sample(pitch[frame], framePeriod[r]) * weight
+        fh = Frame(h, size=frameSize, period=framePeriod[r])
         n = np.random.normal(size=len(a))
-        fn = Frame(n, size=synthSize, period=framePeriod)
+        fn = Frame(n, size=frameSize, period=framePeriod[r])
         for i in range(len(fn)):
             fn[i] *= np.sqrt(1.0 / (hnr[i] + 1))
         e = fn + fh*10
     elif ex == 'holp':
         # Some noise
         n = np.random.normal(size=len(a))
-        fn = Frame(n, size=synthSize, period=framePeriod)
+        fn = Frame(n, size=frameSize, period=framePeriod[r])
 
         # Use the noise to excite a high order AR model
         fh = np.ndarray(fn.shape)
@@ -153,28 +179,66 @@ for pair in pairs:
         
     else:
         exit
-    sw = np.hanning(synthSize+1)
+
+    # Asymmetric window for OLA
+    sw = np.hanning(frameSize+1)
     sw = np.delete(sw, -1)
 
     #e = Window(e, sw)
     s = ARResynthesis(e, ar, g)
-    print "wav: ", saveFile
-    if ola:
+    if opt.ola:
         s = Window(s, sw)
         s = OverlapAdd(s)
         if pz:
             s = ZeroFilter(s, 1.0)
-        WavSink(s.flatten('C'), saveFile, r)
+        return s.flatten('C')
     else:
-        WavSink(e.flatten('C') / framePeriod, saveFile, r)
+        return e.flatten('C') / framePeriod[r]
 
-if False:
-    fig = Figure(5, 1)
-    #stddev = np.sqrt(kVar)
-    sPlot = fig.subplot()
-    sPlot.plot(pitch, 'c')
-    #sPlot.plot(kPitch + stddev, 'b')
-    #sPlot.plot(kPitch - stddev, 'b')
-    sPlot.set_xlim(0, len(pitch))
-    sPlot.set_ylim(0, 500)
-    plt.show()
+#
+# Main loop over the file list
+#
+r = opt.rate
+for pair in pairs:
+    loadFile, saveFile = pair.strip().split()
+
+    # Neither flag - assume a best effort copy
+    if not (opt.encode or opt.decode):
+        rate, a = WavSource(loadFile)
+        if rate != r:
+            raise ValueError("Wrong sample rate")
+        d = decode(encode(a))
+        WavSink(d, saveFile, r)
+
+    # Encode to a file
+    if opt.encode:
+        rate, a = WavSource(loadFile)
+        if rate != r:
+            raise ValueError("Wrong sample rate")
+        (ar, g, pitch, hnr) = encode(a)
+
+        # The cepstrum part is just like HTK
+        c = ARCepstrum(ar, g, lpOrder[r])
+        period = float(framePeriod[r])/r
+        HTKSink(saveFile, c, period)
+
+        # F0 and HNR are both text formats
+        (path, ext) = splitext(saveFile)
+        saveFileLF0 = path + ".f0"
+        saveFileHNR = path + ".hnr"
+        np.savetxt(saveFileLF0, np.log(pitch))
+        np.savetxt(saveFileHNR, hnr)
+
+    # Decode from a file
+    if opt.decode:
+        (path, ext) = splitext(loadFile)
+        loadFileLF0 = path + ".f0"
+        loadFileHNR = path + ".hnr"
+        pitch = np.exp(np.loadtxt(loadFileLF0))
+        hnr = np.loadtxt(loadFileHNR)
+        c, period = HTKSource(loadFile)
+        print c
+        exit
+        (ar, g) = ARCepstrumToPoly(c)
+        d = decode((ar, g, pitch, hnr))
+        WavSink(d, saveFile, r)
