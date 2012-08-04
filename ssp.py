@@ -62,15 +62,18 @@ def shapeiter(shape, dim=0, index=None):
 def refiter(a, shape):
     """
     Iterates over a shape using shapeiter(), but uses the indices to
-    yield references into the arrays passed in a.
+    yield references into the arrays passed in a.  Beware: Iterating over a
+    one dimensional array yields numbers, not arrays.
     """
     if len(shape) == 0:
         yield a
     else:
         for i in shapeiter(shape):
             if type(a) == list:
+                # A list of arrays was passed
                 yield [x[i] for x in a]
             else:
+                # Just one
                 yield a[i]
 
 
@@ -375,15 +378,17 @@ def ARSpectrum(a, g, nSpec=256, twiddle=None):
     return spec
 
 # AR cepstrum
-def ARCepstrum(a, g, nCep=12):
+def ARCepstrum(a, g, order=None):
+    if not order:
+        order = a.shape[-1]
     if a.ndim > 1:
-        ret = np.ndarray((a.shape[0], nCep+1))
+        ret = np.ndarray((a.shape[0], order+1))
         for f in range(a.shape[0]):
-            ret[f] = ARCepstrum(a[f], g[f], nCep)
+            ret[f] = ARCepstrum(a[f], g[f], order)
         return ret
 
-    cep = np.ndarray(nCep+1)
-    for i in range(nCep):
+    cep = np.ndarray(order+1)
+    for i in range(order):
         sum = 0
         for k in range(i):
             index = i-k-1
@@ -392,8 +397,30 @@ def ARCepstrum(a, g, nCep=12):
         cep[i] = sum / (i+1)
         if (i < a.size):
             cep[i] += a[i]
-    cep[nCep] = np.log(max(g, 1e-8))
+    cep[order] = np.log(max(g, 1e-8))
     return cep
+
+# The opposite recursion: cepstrum to AR coeffs
+def ARCepstrumToPoly(cep, order=None):
+    """
+    Convert cepstra to AR polynomial
+    """
+    if not order:
+        order = cep.shape[-1]-1
+    ar = np.ndarray(newshape(cep.shape, order))
+    ag = np.ndarray(newshape(cep.shape, 1))
+    for c, a, g in refiter([cep, ar, ag], newshape(cep.shape)):
+        for i in range(order):
+            sum = 0
+            for k in range(i):
+                index = i-k-1
+                if (index < a.size):
+                    sum += a[index] * c[k] * (k+1)
+            a[i] = -sum / (i+1)
+            if (i < a.size):
+                a[i] += c[i]
+        g[0] = np.exp(c[order])
+    return ar, ag.reshape(newshape(cep.shape))
 
 # AR excitation filter
 def ARExcitation(a, ar, g):
@@ -538,7 +565,7 @@ def ARLogLikelihoodRatio(a, order=10):
     
     return llLaplace - np.logaddexp(llLaplace, llGauss)
 
-import numpy.polynomial as pn
+# import numpy.polynomial as pn
 
 def ARHarmonicPoly(f0, rate, mag=0.99):
     """

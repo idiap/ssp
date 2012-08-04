@@ -61,7 +61,7 @@ for pair in pairs:
     a, g = ARSparse(a, lpOrder)
 #    a, g = ARLevinson(a, lpOrder)
 #    a, g = ARAllPassWarp(a, g, alpha=mel[r])
-    a = ARCepstrum(a, g)
+    a = ARCepstrum(a, g, Parameter("nCepstra", 12))
     m = Mean(a)
     a = Subtract(a, m)
     m = StdDev(a)

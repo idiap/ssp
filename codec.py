@@ -13,7 +13,7 @@ from os.path import splitext
 
 # Command line
 op = OptionParser(usage="usage: %prog [options] [inFile outFile]")
-op.add_option("-r", dest="rate", default=16000,
+op.add_option("-r", dest="rate", default='16000',
               help="Sample rate")
 op.add_option("-f", dest="fileList",
               help="List of input output file pairs")
@@ -51,7 +51,11 @@ lpOrder = {
 
 def encode(a):
     """
-    Encode a speech waveform
+    Encode a speech waveform.  The encoding framers (frames and pitch)
+    pad the frames so that the first frame is centered on sample zero.
+    This is consistent with STRAIGHT and SPTK (I hope!).  At least, it
+    means the pitch can have longer frame lengths and still align with
+    the OLA'd frames.
     """
     if opt.ola:
         frameSize = framePeriod[r] * 2
@@ -99,12 +103,20 @@ def encode(a):
 
 def decode((ar, g, pitch, hnr)):
     """
-    Decode a speech waveform
+    Decode a speech waveform.
     """
+    nFrames = len(ar)
+    assert(len(g) == nFrames)
+    assert(len(pitch) == nFrames)
+    assert(len(hnr) == nFrames)
     if opt.ola:
+        # The original framer padded the ends
         frameSize = framePeriod[r] * 2
+        nSamples = framePeriod[r] * (nFrames-1)
     else:
+        # No padding
         frameSize = framePeriod[r]
+        nSamples = frameSize * nFrames
 
     ex = Parameter('Excitation', 'synth')
     if ex == 'ar':
@@ -112,7 +124,7 @@ def decode((ar, g, pitch, hnr)):
     elif ex == 'noise':
         e = np.random.normal(size=f.shape)
     elif ex == 'robot':
-        ew = np.zeros(len(a))
+        ew = np.zeros(nSamples)
         period = int(1.0 / 200 * r)
         for i in range(0, len(ew), period):
             ew[i] = period
@@ -122,12 +134,12 @@ def decode((ar, g, pitch, hnr)):
         mperiod = int(1.0 / np.mean(pitch) * r)
         ptype = Parameter('Pulse', 'impulse')
         pr, pg = pulse_response(ptype, period=mperiod, order=lpOrder[r])
-        h = np.zeros(len(a))
+        h = np.zeros(nSamples)
         i = 0
         frame = 0
-        while i < len(a) and frame < len(pitch):
+        while i < nSamples and frame < len(pitch):
             period = int(1.0 / pitch[frame] * r)
-            if i + period > len(a):
+            if i + period > nSamples:
                 break
             weight = np.sqrt(hnr[frame] / (hnr[frame] + 1))
             h[i:i+period] = pulse(period, ptype) * weight
@@ -137,29 +149,30 @@ def decode((ar, g, pitch, hnr)):
         fh = Frame(h, size=frameSize, period=framePeriod[r])
 
         # Noise part
-        n = np.random.normal(size=len(a))
-        fn = Frame(ZeroFilter(n, 1.0), size=frameSize, period=framePeriod[r])
+        n = np.random.normal(size=nSamples)
+        n = ZeroFilter(n, 1.0) # Heuritic, but makes it clearer
+        fn = Frame(n, size=frameSize, period=framePeriod[r])
         for i in range(len(fn)):
             fn[i] *= np.sqrt(1.0 / (hnr[i] + 1))
         e = fn + fh
     elif ex == 'sine':
         order = 20
         sine = Harmonics(r, order)
-        h = np.zeros(len(a))
+        h = np.zeros(nSamples)
         for i in range(0, len(h)-framePeriod[r], framePeriod[r]):
             frame = i // framePeriod[r]
             period = int(1.0 / pitch[frame] * r)
             weight = np.sqrt(hnr[frame] / (hnr[frame] + 1))
             h[i:i+framePeriod[r]] = sine.sample(pitch[frame], framePeriod[r]) * weight
         fh = Frame(h, size=frameSize, period=framePeriod[r])
-        n = np.random.normal(size=len(a))
+        n = np.random.normal(size=nSamples)
         fn = Frame(n, size=frameSize, period=framePeriod[r])
         for i in range(len(fn)):
             fn[i] *= np.sqrt(1.0 / (hnr[i] + 1))
         e = fn + fh*10
     elif ex == 'holp':
         # Some noise
-        n = np.random.normal(size=len(a))
+        n = np.random.normal(size=nSamples)
         fn = Frame(n, size=frameSize, period=framePeriod[r])
 
         # Use the noise to excite a high order AR model
@@ -198,7 +211,7 @@ def decode((ar, g, pitch, hnr)):
 #
 # Main loop over the file list
 #
-r = opt.rate
+r = int(opt.rate)
 for pair in pairs:
     loadFile, saveFile = pair.strip().split()
 
@@ -237,8 +250,6 @@ for pair in pairs:
         pitch = np.exp(np.loadtxt(loadFileLF0))
         hnr = np.loadtxt(loadFileHNR)
         c, period = HTKSource(loadFile)
-        print c
-        exit
         (ar, g) = ARCepstrumToPoly(c)
         d = decode((ar, g, pitch, hnr))
         WavSink(d, saveFile, r)
