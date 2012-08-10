@@ -934,7 +934,7 @@ def Argmax(a, loBin=None, hiBin=None):
         hi = hiBin
         lo = loBin
         m = np.argmax(i[lo:hi])
-        while (m == 0 or m == hi-lo) and lo < hi:
+        while (m == 0 or m == hi-lo) and lo+1 < hi:
             if m == 0:
                 lo += 1
             if m == hi-lo:
