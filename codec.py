@@ -21,9 +21,15 @@ op.add_option("-e", dest="encode", action="store_true", default=False,
               help="Encode source files")
 op.add_option("-d", dest="decode", action="store_true", default=False,
               help="Decode source files")
-op.add_option("-x", dest="ola", action="store_false", default=True,
-              help="Don't use OLA")
+op.add_option("-o", dest="ola", action="store_false", default=True,
+              help="Concatenate frames (i.e., don't use OLA)")
+op.add_option("-x", dest="excitation", action="store_true", default=False,
+              help="Output excitation waveform instead of encoding")
 (opt, arg) = op.parse_args()
+
+# For excitation we need to disable OLA
+if opt.excitation:
+    opt.ola = False
 
 # Fall back on command line input and output
 pairs = []
@@ -41,12 +47,14 @@ pz = False
 # Sample rate specific default parameters
 framePeriod = {
     8000: 128,
-    16000: 128
+    16000: 128,
+    22050: 256
 }
 
 lpOrder = {
     8000: 10,
-    16000: 24
+    16000: 24,
+    22050: 24
 }
 
 def encode(a):
@@ -98,6 +106,10 @@ def encode(a):
         sPlot.set_ylim(0, 500)
         plt.show()
 
+    if opt.excitation:
+        e = ARExcitation(f, ar, g)
+        return e.flatten('C')/frameSize
+
     return (ar, g, pitch, hnr)
 
 
@@ -109,14 +121,15 @@ def decode((ar, g, pitch, hnr)):
     assert(len(g) == nFrames)
     assert(len(pitch) == nFrames)
     assert(len(hnr) == nFrames)
+
+    # The original framer padded the ends so the number of samples to
+    # syntheisise is a bit less than you might think
     if opt.ola:
-        # The original framer padded the ends
         frameSize = framePeriod[r] * 2
         nSamples = framePeriod[r] * (nFrames-1)
     else:
-        # No padding
         frameSize = framePeriod[r]
-        nSamples = frameSize * nFrames
+        nSamples = frameSize * (nFrames-1)
 
     ex = Parameter('Excitation', 'synth')
     if ex == 'ar':
@@ -150,7 +163,7 @@ def decode((ar, g, pitch, hnr)):
 
         # Noise part
         n = np.random.normal(size=nSamples)
-        n = ZeroFilter(n, 1.0) # Heuritic, but makes it clearer
+        n = ZeroFilter(n, 1.0) # Include the radiation impedance
         fn = Frame(n, size=frameSize, period=framePeriod[r])
         for i in range(len(fn)):
             fn[i] *= np.sqrt(1.0 / (hnr[i] + 1))
@@ -204,9 +217,7 @@ def decode((ar, g, pitch, hnr)):
         s = OverlapAdd(s)
         if pz:
             s = ZeroFilter(s, 1.0)
-        return s.flatten('C')
-    else:
-        return e.flatten('C') / framePeriod[r]
+    return s.flatten('C')
 
 #
 # Main loop over the file list
@@ -220,8 +231,12 @@ for pair in pairs:
         rate, a = WavSource(loadFile)
         if rate != r:
             raise ValueError("Wrong sample rate")
-        d = decode(encode(a))
-        WavSink(d, saveFile, r)
+        if opt.excitation:
+            e = encode(a)
+            WavSink(e, saveFile, r)
+        else:
+            d = decode(encode(a))
+            WavSink(d, saveFile, r)
 
     # Encode to a file
     if opt.encode:

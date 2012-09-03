@@ -43,9 +43,14 @@ fp = 256
 if r == 16000:
     fs = 1024
     fp = 128
+if r == 22050:
+    fs = 2048
+    fp = 256
 elif r == 96000:
     fs = 8192
     fp = 160
+
+print "Frame period", fp, "is", fp/float(r)*1000, "ms, or", float(r) / fp, "Hz"
 
 loPitch = 40
 hiPitch = 500
@@ -79,7 +84,7 @@ wf = Window(f, w)
 p = Periodogram(wf)
 
 # Plot
-fig = Figure(5,1)
+fig = Figure(6,1)
 pSpec = fig.subplot()
 specplot(pSpec, p, r)
 sSpec = fig.subplot()
@@ -109,7 +114,7 @@ if method == 'ac':
     if True:
         fPlot = fig.subplot()
         #fPlot.set_xlim(0, fs)
-        frame = Parameter("Frame", 10)
+        frame = Parameter("Frame", 0)
         #fPlot.plot(f[frame], 'r')
         #fPlot.plot(wf[frame], 'g')
         fPlot.plot(ac[frame], 'b')
@@ -128,16 +133,20 @@ if method == 'ac':
     for i in range(len(m)):
         pitch[i] = 1.0 / acbin_to_seconds(m[i], r)
         fnac = np.max([nac[i, m[i]], 1e-6])
-        hnr[i] = fnac / (1.0 - fnac)
+        if (nac[i, m[i]-1] > nac[i, m[i]]) or (nac[i, m[i]+1] > nac[i, m[i]]):
+            # No peak found; set HNR small
+            hnr[i] = 1e-8
+        else:
+            hnr[i] = fnac / (1.0 - fnac)
         var[i] = (1.0 / hnr[i] * prange)**2
 
-    if False:
-        hPlot = fig.subplot()
-        hPlot.plot(hnr)
-        hPlot.plot(1/hnr)
-        hPlot.plot(1/hnr**2)
-        hPlot.set_xlim(0, len(pitch))
-        hPlot.set_ylim(0, 5)
+    stddev = np.sqrt(var)
+    hPlot = fig.subplot()
+    hPlot.plot(pitch, 'c')
+    hPlot.plot(pitch + stddev, 'b')
+    hPlot.plot(pitch - stddev, 'b')
+    hPlot.set_xlim(0, len(pitch))
+    hPlot.set_ylim(0, hiPitch)
 
 
     pPlot = fig.subplot()
@@ -165,7 +174,11 @@ if method == 'ac':
         m[i] = np.argmax(nac[i, loBin:hiBin]) + loBin
         pitch[i] = 1.0 / acbin_to_seconds(m[i], r)
         fnac = np.max([nac[i, m[i]], 1e-6])
-        hnr[i] = fnac / (1.0 - fnac)
+        if (nac[i, m[i]-1] > nac[i, m[i]]) or (nac[i, m[i]+1] > nac[i, m[i]]):
+            # No peak found; set HNR small
+            hnr[i] = 1e-8
+        else:
+            hnr[i] = fnac / (1.0 - fnac)
         var[i] = (1.0 / hnr[i])**2 * rng**2
     
     sPlot = fig.subplot()

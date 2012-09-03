@@ -987,7 +987,11 @@ def ACPitch(a, loPitch=40, hiPitch=500, r=16000):
     for i in range(len(m)):
         pitch[i] = 1.0 / acbin_to_seconds(m[i], r)
         fnac = np.max([nac[i, m[i]], 1e-6])
-        hnr[i] = fnac / (1.0 - fnac)
+        if (nac[i, m[i]-1] > nac[i, m[i]]) or (nac[i, m[i]+1] > nac[i, m[i]]):
+            # No peak found; set HNR small
+            hnr[i] = 1e-8
+        else:
+            hnr[i] = fnac / (1.0 - fnac)
         var[i] = (1.0 / hnr[i] * prange)**2
 
     # Kalman smoother
@@ -1007,7 +1011,11 @@ def ACPitch(a, loPitch=40, hiPitch=500, r=16000):
         pitch[i] = 1.0 / acbin_to_seconds(m[i], r)
         fnac = np.max([nac[i, m[i]], 1e-6])
         fnac = np.min([fnac, 1.0 - 1e-6])
-        hnr[i] = fnac / (1.0 - fnac)
+        if (nac[i, m[i]-1] > nac[i, m[i]]) or (nac[i, m[i]+1] > nac[i, m[i]]):
+            # No peak found; set HNR small
+            hnr[i] = 1e-8
+        else:
+            hnr[i] = fnac / (1.0 - fnac)
         var[i] = (1.0 / hnr[i] * rng)**2
     
     # Kalman smoother again
@@ -1049,12 +1057,15 @@ class Harmonics():
             phi[i] *= 2.0 - 2.0 * i / self.order
         return phi.sum(axis=0)
 
-def pulse(n, ptype='impulse', derivative=True, rate=16000.0):
+def pulse(n, ptype='impulse', params=None, derivative=True, rate=16000.0):
     pulse = np.zeros((n))
     T0 = n/float(rate) # Fundamental period in seconds
     T = float(n)
     if ptype == 'impulse':
         pulse[T/2] = 1
+    elif ptype == 'dimpulse':
+        pulse[T/2] = 1
+        pulse[T/2+1] = -1
     elif ptype == 'poly':
         Tp = int(T * 0.4)
         Tn = int(T * 0.16)
@@ -1064,6 +1075,8 @@ def pulse(n, ptype='impulse', derivative=True, rate=16000.0):
         for i in range(Tn):
             t = float(i)
             pulse[i+Tp] = 1.0 - (t/Tn)**2
+        if derivative:
+            pulse = ZeroFilter(pulse)
     elif ptype == 'trig':
         Tp = int(T * 0.4)
         Tn = int(T * 0.16)
@@ -1073,6 +1086,8 @@ def pulse(n, ptype='impulse', derivative=True, rate=16000.0):
         for i in range(Tn):
             t = float(i)
             pulse[i+Tp] = np.cos(t/Tn * np.pi/2)
+        if derivative:
+            pulse = ZeroFilter(pulse)
     elif ptype == 'gamma':
         Rg = 1.2
         Rk = 0.3
@@ -1083,24 +1098,22 @@ def pulse(n, ptype='impulse', derivative=True, rate=16000.0):
         for i in range(int(Te)):
             t = 1.0-float(i)/Te
             pulse[i] = np.exp((alpha-1.0)*np.log(t) - t/beta)
+        if derivative:
+            pulse = ZeroFilter(pulse)
     elif ptype == 'igamma':
         alpha = 10
         beta  = 0.16*(alpha+1)
         for i in range(int(T)):
             t = 1.0-float(i)/T
             pulse[i] = np.exp(-(alpha+1.0)*np.log(t) - beta/t)
+        if derivative:
+            pulse = ZeroFilter(pulse)
     elif ptype == 'lf':
+        if not params:
+            #params = (1.2, 0.3, 700)  # Average male
+            params = (1.0, 0.3, 400)  # Average female
         # Assume Ee = -1 and T = 1
-        if True:
-            # Male
-            Fa = 700 # Hz
-            Rg = 1.2
-            Rk = 0.3
-        else:
-            # Female - lengthen things
-            Fa = 400 # Hz
-            Rg = 1.0
-            Rk = 0.3
+        (Rg, Rk, Fa) = params
 
         # These are all in seconds
         Ta = 1.0/(2.0*np.pi*Fa)
@@ -1116,19 +1129,18 @@ def pulse(n, ptype='impulse', derivative=True, rate=16000.0):
                 np.exp(alpha*t)  * np.sin(omega*t) /
                 np.exp(alpha*Te) / np.sin(omega*Te)
                 )
-        if True:
-            for i in range(int(Te/T0*n+0.5), n):
-                t = float(i)/n*T0
-                pulse[i] = -(
-                    (np.exp(-(t-Te)*eps) - np.exp(-(T0-Te)*eps)) /
-                    (1.0 - np.exp(-(T0-Te)*eps))
-                    )
+        for i in range(int(Te/T0*n+0.5), n):
+            t = float(i)/n*T0
+            pulse[i] = -(
+                (np.exp(-(t-Te)*eps) - np.exp(-(T0-Te)*eps)) /
+                (1.0 - np.exp(-(T0-Te)*eps))
+            )
+    elif ptype == 'invexp':
+        for i in range(n):
+            t = 1.0-float(i/T)
+            pulse[i] = -np.exp(-t*5)
     else:
         raise LookupError('Unknown pulse type ' + ptype)
-
-    if ptype != 'impulse':
-        if derivative and ptype != 'lf':
-            pulse = ZeroFilter(pulse)
 
     # We want the total power in the pulse to average one for each
     # sample, so the power is the length of the pulse
