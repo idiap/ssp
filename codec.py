@@ -57,6 +57,7 @@ lpOrder = {
     22050: 24
 }
 
+
 def encode(a):
     """
     Encode a speech waveform.  The encoding framers (frames and pitch)
@@ -80,6 +81,10 @@ def encode(a):
     if pz:
         a = ZeroMean(np.array(a))
         a = PoleFilter(a, 1.0)
+
+    # Keep f around after the function so the decoder can do a
+    # reference decoding on the real excitaton.
+    global f
     f = Frame(a, size=frameSize, period=framePeriod[r])
     aw = np.hanning(frameSize+1)
     aw = np.delete(aw, -1)
@@ -123,7 +128,7 @@ def decode((ar, g, pitch, hnr)):
     assert(len(hnr) == nFrames)
 
     # The original framer padded the ends so the number of samples to
-    # syntheisise is a bit less than you might think
+    # synthesise is a bit less than you might think
     if opt.ola:
         frameSize = framePeriod[r] * 2
         nSamples = framePeriod[r] * (nFrames-1)
@@ -132,16 +137,27 @@ def decode((ar, g, pitch, hnr)):
         nSamples = frameSize * (nFrames-1)
 
     ex = Parameter('Excitation', 'synth')
+
+    # Use the original AR residual; it should be a very good
+    # reconstruction.
     if ex == 'ar':
         e = ARExcitation(f, ar, g)
+
+    # Just noise.  This is effectively a whisper synthesis.
     elif ex == 'noise':
         e = np.random.normal(size=f.shape)
+
+    # Just harmonics, and with a fixed F0.  This is the classic robot
+    # syntheisis.
     elif ex == 'robot':
         ew = np.zeros(nSamples)
         period = int(1.0 / 200 * r)
         for i in range(0, len(ew), period):
             ew[i] = period
         e = Frame(ew, size=frameSize, period=framePeriod[r])        
+
+    # Synthesise harmonics plus noise in the ratio suggested by the
+    # HNR.
     elif ex == 'synth':
         # Harmonic part
         mperiod = int(1.0 / np.mean(pitch) * r)
@@ -168,6 +184,9 @@ def decode((ar, g, pitch, hnr)):
         for i in range(len(fn)):
             fn[i] *= np.sqrt(1.0 / (hnr[i] + 1))
         e = fn + fh
+
+    # Like harmonics plus noise, but with explicit sinusoids instead
+    # of time domain impulses.
     elif ex == 'sine':
         order = 20
         sine = Harmonics(r, order)
@@ -176,13 +195,18 @@ def decode((ar, g, pitch, hnr)):
             frame = i // framePeriod[r]
             period = int(1.0 / pitch[frame] * r)
             weight = np.sqrt(hnr[frame] / (hnr[frame] + 1))
-            h[i:i+framePeriod[r]] = sine.sample(pitch[frame], framePeriod[r]) * weight
+            h[i:i+framePeriod[r]] = ( sine.sample(pitch[frame], framePeriod[r])
+                                      * weight )
         fh = Frame(h, size=frameSize, period=framePeriod[r])
         n = np.random.normal(size=nSamples)
         fn = Frame(n, size=frameSize, period=framePeriod[r])
         for i in range(len(fn)):
             fn[i] *= np.sqrt(1.0 / (hnr[i] + 1))
         e = fn + fh*10
+
+    # High order linear prediction.  Synthesise the harmonics using
+    # noise to excite a high order polynomial with roots resembling
+    # harmonics.
     elif ex == 'holp':
         # Some noise
         n = np.random.normal(size=nSamples)
@@ -204,6 +228,7 @@ def decode((ar, g, pitch, hnr)):
         e = fh # fn + fh*30
         
     else:
+        print "Unknown synthesis method"
         exit
 
     # Asymmetric window for OLA
