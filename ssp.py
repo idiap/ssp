@@ -129,7 +129,22 @@ def PoleFilter(a, pole=0.97):
         filter[i] = a[i] + pole * store
         store = filter[i]
     return filter
-    
+
+def PolePairFilter(a, mag, angle):
+    """
+    Takes a magnitude and phase taken to be the location of a pole;
+    filters the signal using the implied conjugate pair.
+    """
+    r1 = 2.0 * mag * np.cos(angle)
+    r2 = -mag**2
+    filter = np.zeros(a.size)
+    for i in range(a.size):
+        filter[i] = a[i]
+        if i > 0:
+            filter[i] += r1 * filter[i-1]
+        if i > 2:
+            filter[i] += r2 * filter[i-2]
+    return filter
 
 # Convert array to framed array
 # The opposite of this for size = period is a.flatten
@@ -1058,6 +1073,7 @@ class Harmonics():
         return phi.sum(axis=0)
 
 def pulse(n, ptype='impulse', params=None, derivative=True, rate=16000.0):
+    n = int(n)
     pulse = np.zeros((n))
     T0 = n/float(rate) # Fundamental period in seconds
     T = float(n)
@@ -1139,6 +1155,22 @@ def pulse(n, ptype='impulse', params=None, derivative=True, rate=16000.0):
         for i in range(n):
             t = 1.0-float(i/T)
             pulse[i] = -np.exp(-t*5)
+    elif ptype == 'polefilter':
+        pulse[0] = 1.0
+        pulse = PoleFilter(pulse, params)
+    elif ptype == 'zerofilter':
+        pulse[0] = 1.0
+        pulse = ZeroFilter(pulse, params)
+    elif ptype == 'polezerofilter':
+        pulse[1] = 1.0
+        pulse = PoleFilter(pulse, params[0])
+        pulse = PoleFilter(pulse, params[0])
+        pulse = ZeroFilter(pulse, params[1])
+    elif ptype == 'polepairzerofilter':
+        pulse[1] = 1.0
+        pulse = PoleFilter(pulse, params[0])
+        pulse = PolePairFilter(pulse, params[0], params[1])
+        pulse = ZeroFilter(pulse, params[2])
     else:
         raise LookupError('Unknown pulse type ' + ptype)
 
