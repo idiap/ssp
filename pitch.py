@@ -84,9 +84,9 @@ wf = Window(f, w)
 p = Periodogram(wf)
 
 # Plot
-fig = Figure(6,1)
-pSpec = fig.subplot()
-specplot(pSpec, p, r)
+fig = Figure(5,1)
+#pSpec = fig.subplot()
+#specplot(pSpec, p, r)
 sSpec = fig.subplot()
 specplot(sSpec, p[:,:hertz_to_dftbin(hiPitch, fs, r)], hiPitch*2)
 
@@ -111,7 +111,7 @@ if method == 'ac':
     nac = Divide(ac, wac)
     #h = Harmonogram(nac, 'psd', True)
 
-    if True:
+    if False:
         fPlot = fig.subplot()
         #fPlot.set_xlim(0, fs)
         frame = Parameter("Frame", 0)
