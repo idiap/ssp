@@ -28,6 +28,8 @@ def Parameter(param, default=None):
         print '# export {0}={1}'.format(param, default)
         return default
 
+
+
 def newshape(s, lowdim=0):
     """
     Given a shape s, calculate the shape of a new array with the
@@ -41,7 +43,8 @@ def newshape(s, lowdim=0):
         sl[-1] = lowdim
     return tuple(sl)
 
-
+# Iterators.  These allow slicing and broadcasting when the default
+# rules are not appropriate.
 def shapeiter(shape, dim=0, index=None):
     """
     Given a tuple representing an ndarray shape, iterates over all
@@ -75,6 +78,32 @@ def refiter(a, shape):
             else:
                 # Just one
                 yield a[i]
+
+
+class PulseCodeModulation:
+    """
+    A PulseCodeModulation (the instance might be abbreviated to pcm)
+    is a class that represents something with a sample rate.  It
+    contains methods that require a sample rate in order to work.
+    """
+    def __init__(self, rate=None):
+        self.rate = rate
+
+    def speech_ar_order(self):
+        """
+        The rationale here is purely a rule of thumb.
+        """
+        if not self.rate:
+            raise ValueError("rate undefined")
+        return int(self.rate/1000)+2
+
+class Autoregression:
+    """
+    Class containing autoregression methods; requires an order.  The
+    word is taken to be one word 'autoregression', but abbreviated to ar.
+    """
+    def __init__(self, order):
+        self.order = int(order)
 
 
 # Convert between frequency and things
@@ -237,9 +266,7 @@ def Autocorrelation(a, input=None):
         o[...] = np.real(dft)/dpsd.size
     return ret
 
-#
-# All of the methods below actually calculate gain squared
-#
+# All of the methods below actually calculate gain squared.
 def ARMatrix(a, order=10, method='matrix'):
     if a.ndim > 1:
         ret = np.ndarray((a.shape[0], order))
@@ -1079,6 +1106,8 @@ def pulse(n, ptype='impulse', params=None, derivative=True, rate=16000.0):
     T = float(n)
     if ptype == 'impulse':
         pulse[T/2] = 1
+    elif ptype == 'mipulse':
+        pulse[T/2] = -1
     elif ptype == 'dimpulse':
         pulse[T/2] = 1
         pulse[T/2+1] = -1
