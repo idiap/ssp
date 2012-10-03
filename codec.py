@@ -42,13 +42,11 @@ else:
         exit(1)
     pairs = [ ' '.join(arg) ]
 
-pz = False
-
 # Sample rate specific default parameters
 framePeriod = {
     8000: 128,
     16000: 128,
-    22050: 256
+    22050: 128
 }
 
 lpOrder = {
@@ -72,15 +70,10 @@ def encode(a):
         frameSize = framePeriod[r]
 
     # First the pitch as it's on the unaltered waveform.  The frame
-    # should be long with no window.
-    pitchSize = 1024
+    # should be long with no window.  1024 at 16 kHz is 64 ms.
+    pitchSize = 2048 #1024
     pf = Frame(a, size=pitchSize, period=framePeriod[r])
-    pitch, hnr = ACPitch(pf)
-
-    # Now mess with with pre-emphasis and the like for the LP
-    if pz:
-        a = ZeroMean(np.array(a))
-        a = PoleFilter(a, 1.0)
+    pitch, hnr = ACPitch(pf, r=r)
 
     # Keep f around after the function so the decoder can do a
     # reference decoding on the real excitaton.
@@ -110,10 +103,6 @@ def encode(a):
         sPlot.set_xlim(0, len(pitch))
         sPlot.set_ylim(0, 500)
         plt.show()
-
-    if opt.excitation:
-        e = ARExcitation(f, ar, g)
-        return e.flatten('C')/frameSize
 
     return (ar, g, pitch, hnr)
 
@@ -171,7 +160,7 @@ def decode((ar, g, pitch, hnr)):
             if i + period > nSamples:
                 break
             weight = np.sqrt(hnr[frame] / (hnr[frame] + 1))
-            h[i:i+period] = pulse(period, ptype) * weight
+            h[i:i+period] = pulse(period, ptype, rate=r) * weight
             i += period
             frame = i // framePeriod[r]
         h = ARExcitation(h, pr, 1.0)
@@ -227,22 +216,69 @@ def decode((ar, g, pitch, hnr)):
             fn[i] *= np.sqrt(1.0 / (hnr[i] + 1))
         e = fh # fn + fh*30
         
+    # Shaped excitation.  The pulses are shaped by a filter to have a
+    # rolloff, then added to the noise.  The resulting signal is
+    # flattened using AR.
+    elif ex == 'shaped':
+        # Harmonic part
+        h = np.zeros(nSamples)
+        i = 0
+        frame = 0
+        while i < nSamples and frame < len(pitch):
+            period = int(1.0 / pitch[frame] * r)
+            if i + period > nSamples:
+                break
+            weight = np.sqrt(hnr[frame] / (hnr[frame] + 1))
+            h[i:i+period] = pulse(period, "mipulse") * weight
+            i += period
+            frame = i // framePeriod[r]
+
+        # Filter to mimic the glottal pulse
+        pole = Parameter("Pole", 0.97)
+        #h = PoleFilter(h, pole)
+        #h = PoleFilter(h, pole)
+        h = PolePairFilter(h, pole, np.mean(pitch)/r * 2 * np.pi)
+        h = ZeroFilter(h, 1.0)
+        fh = Frame(h, size=frameSize, period=framePeriod[r])
+        
+
+        # Noise part
+        n = np.random.normal(size=nSamples)
+        n = ZeroFilter(n, 1.0) # Include the radiation impedance
+        fn = Frame(n, size=frameSize, period=framePeriod[r])
+        for i in range(len(fn)):
+            fn[i] *= np.sqrt(1.0 / (hnr[i] + 1))
+
+        # Combination
+        assert(len(fh) == len(fn))        
+        hgain = Parameter("HGain", 1.0)
+        e = fn + fh * hgain
+        hnw = np.hanning(frameSize)
+        for i in range(len(e)):
+            ep = Window(e[i], hnw)
+            #ep = e[i]
+            eac = Autocorrelation(ep)
+            ea, eg = ARLevinson(eac, order=lpOrder[r])
+            e[i] = ARExcitation(e[i], ea, eg)
+
     else:
         print "Unknown synthesis method"
         exit
 
-    # Asymmetric window for OLA
-    sw = np.hanning(frameSize+1)
-    sw = np.delete(sw, -1)
-
-    #e = Window(e, sw)
-    s = ARResynthesis(e, ar, g)
-    if opt.ola:
-        s = Window(s, sw)
-        s = OverlapAdd(s)
-        if pz:
-            s = ZeroFilter(s, 1.0)
-    return s.flatten('C')
+    if opt.excitation:
+        s = e.flatten('C')/frameSize
+    else:
+        s = ARResynthesis(e, ar, g)
+        if opt.ola:
+            # Asymmetric window for OLA
+            sw = np.hanning(frameSize+1)
+            sw = np.delete(sw, -1)
+            s = Window(s, sw)
+            s = OverlapAdd(s)
+        else:
+            s = s.flatten('C')
+            
+    return s
 
 #
 # Main loop over the file list
@@ -256,12 +292,8 @@ for pair in pairs:
         rate, a = WavSource(loadFile)
         if rate != r:
             raise ValueError("Wrong sample rate")
-        if opt.excitation:
-            e = encode(a)
-            WavSink(e, saveFile, r)
-        else:
-            d = decode(encode(a))
-            WavSink(d, saveFile, r)
+        d = decode(encode(a))
+        WavSink(d, saveFile, r)
 
     # Encode to a file
     if opt.encode:
