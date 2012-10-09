@@ -1,4 +1,5 @@
-#!/usr/bin/env python2
+#!/usr/bin/python2
+# -*- coding: utf-8 -*-
 #
 # Copyright 2012 by Idiap Research Institute, http://www.idiap.ch
 #
@@ -18,8 +19,12 @@ op.add_option("-r", dest="rate", default='16000',
               help="Sample rate")
 op.add_option("-f", dest="fileList",
               help="List of input output file pairs")
+op.add_option("-m", dest="framePeriod", action="store", type="int",
+              help="Frame period")
 op.add_option("-e", dest="encode", action="store_true", default=False,
               help="Encode source files")
+op.add_option("-p", dest="pitch", action="store_true", default=False,
+              help="Encode source files, linear cont. pitch only")
 op.add_option("-d", dest="decode", action="store_true", default=False,
               help="Decode source files")
 op.add_option("-o", dest="ola", action="store_false", default=True,
@@ -295,11 +300,15 @@ def decode((ar, g, pitch, hnr)):
 #
 r = int(opt.rate)
 pcm = PulseCodeModulation(r)
+if opt.framePeriod:
+    framePeriod = opt.framePeriod
+
 for pair in pairs:
     loadFile, saveFile = pair.strip().split()
 
+    print "%s" % saveFile
     # Neither flag - assume a best effort copy
-    if not (opt.encode or opt.decode):
+    if not (opt.encode or opt.decode or opt.pitch):
         a = pcm.WavSource(loadFile)
         d = decode(encode(a, pcm))
         pcm.WavSink(d, saveFile)
@@ -321,6 +330,14 @@ for pair in pairs:
         saveFileHNR = path + ".hnr"
         np.savetxt(saveFileLF0, np.log(pitch))
         np.savetxt(saveFileHNR, hnr)
+
+    # Encode cont. pitch only to a file
+    if opt.pitch:
+        a = pcm.WavSource(loadFile)
+        (ar, g, pitch, hnr) = encode(a)
+
+        # F0 and HNR are both text formats
+        np.savetxt(saveFile, pitch)
 
     # Decode from a file
     if opt.decode:
