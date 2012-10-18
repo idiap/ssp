@@ -13,7 +13,7 @@ from scipy.io import wavfile
 # Parameters!
 # Get an environment variable
 from os import environ
-def Parameter(param, default=None):
+def parameter(param, default=None):
     if param in environ:
         print 'export {0}={1}'.format(param, environ[param])
         # Try to cast it to a numeric type
@@ -79,7 +79,6 @@ def refiter(a, shape):
                 # Just one
                 yield a[i]
 
-
 class PulseCodeModulation:
     """
     A PulseCodeModulation (the instance might be abbreviated to pcm)
@@ -90,54 +89,60 @@ class PulseCodeModulation:
         self.rate = rate
 
     def speech_ar_order(self):
-        """
-        The rationale here is purely a rule of thumb.
-        """
-        if not self.rate:
+        """ The rationale here is purely a rule of thumb. """
+        if self.rate is None:
             raise ValueError("rate undefined")
         return int(self.rate/1000)+2
+
+    def hertz_to_dftbin(self, hz, fs):
+        """ Returns the DFT bin corresponding to a value in Hertz """
+        return int(float(hz) / float(self.rate) * fs + 0.5)
+
+    def dftbin_to_hertz(self, b, fs):
+        """ Returns the value in Hertz corresponding to a DFT bin """
+        return float(b) * self.rate / float(fs)
+
+    def seconds_to_acbin(self, sec):
+        """ Returns the autocorrelation bin corresponding to a given lag """
+        return int(float(sec) * float(self.rate) + 0.5)
+
+    def acbin_to_seconds(self, b):
+        """ Returns the lag corresponding to a given autocorrelation bin """
+        return float(b) / self.rate
+
+    def WavSource(self, file):
+        """ Reads a wav file into a numpy array """
+        rate, audio = wavfile.read(file)
+        if audio.dtype == 'int16':
+            audio = np.cast['float'](audio)
+            audio /= 32768
+        if self.rate is None:
+            self.rate = rate
+        elif self.rate != rate:
+            raise ValueError("WavSource: Wrong sample rate")
+        return audio
+
+    def WavSink(self, a, file):
+        """ Writes a numpy array to a 16 bit wav file """
+        audio = a * 32768
+        audio = np.cast['int16'](audio)
+        wavfile.write(file, self.rate, audio)
+        return a
+
 
 class Autoregression:
     """
     Class containing autoregression methods; requires an order.  The
-    word is taken to be one word 'autoregression', but abbreviated to ar.
+    word is taken to be one word 'autoregression', but abbreviated to 'ar'.
     """
     def __init__(self, order):
         self.order = int(order)
 
 
-# Convert between frequency and things
-def hertz_to_dftbin(hz, fs, rate):
-    return int(float(hz) / float(rate) * fs + 0.5)
-
-def dftbin_to_hertz(b, fs, rate):
-    return float(b) * rate / float(fs)
-
-def seconds_to_acbin(sec, rate):
-    return int(float(sec) * float(rate) + 0.5)
-
-def acbin_to_seconds(b, rate):
-    return float(b) / rate
-
 #
 # The functions here use ThisFormat rather than this_format to make
 # them look more like Tracter.  They also use the lowdims() iterator
 #
-
-# Load a .wav file
-def WavSource(file):
-    rate, audio = wavfile.read(file)
-    if audio.dtype == 'int16':
-        audio = np.cast['float'](audio)
-        audio /= 32768
-    return rate, audio
-
-# Save a .wav file
-def WavSink(a, file, rate):
-    audio = a * 32768
-    audio = np.cast['int16'](audio)
-    wavfile.write(file, rate, audio)
-    return a
 
 # Filter comprising a single zero
 def ZeroFilter(a, zero=0.97):
@@ -985,7 +990,7 @@ def Argmax(a, loBin=None, hiBin=None):
         o[0] = m + lo
     return np.squeeze(ret)
 
-def ACPitch(a, loPitch=40, hiPitch=500, r=16000):
+def ACPitch(a, pcm, loPitch=40, hiPitch=500):
     """
     Finds the pitch contour.  Input should be framed, but not
     windowed.
@@ -993,10 +998,10 @@ def ACPitch(a, loPitch=40, hiPitch=500, r=16000):
     fs = a.shape[-1]
     loPeriod = 1.0 / loPitch
     hiPeriod = 1.0 / hiPitch
-    loDFTBin = hertz_to_dftbin(loPitch, fs, r)
-    hiDFTBin = hertz_to_dftbin(hiPitch, fs, r)
-    loACBin = seconds_to_acbin(hiPeriod, r)
-    hiACBin = seconds_to_acbin(loPeriod, r)
+    loDFTBin = pcm.hertz_to_dftbin(loPitch, fs)
+    hiDFTBin = pcm.hertz_to_dftbin(hiPitch, fs)
+    loACBin = pcm.seconds_to_acbin(hiPeriod)
+    hiACBin = pcm.seconds_to_acbin(loPeriod)
 
     # The AC bin for the period of the lowest frequency needs to be
     # smaller than the size of the AC.
@@ -1027,7 +1032,7 @@ def ACPitch(a, loPitch=40, hiPitch=500, r=16000):
     var = np.ndarray(len(m))
     prange = hiPitch - loPitch
     for i in range(len(m)):
-        pitch[i] = 1.0 / acbin_to_seconds(m[i], r)
+        pitch[i] = 1.0 / pcm.acbin_to_seconds(m[i])
         fnac = np.max([nac[i, m[i]], 1e-6])
         if (nac[i, m[i]-1] > nac[i, m[i]]) or (nac[i, m[i]+1] > nac[i, m[i]]):
             # No peak found; set HNR small
@@ -1044,13 +1049,13 @@ def ACPitch(a, loPitch=40, hiPitch=500, r=16000):
     # floating accuracy.
     mpitch = np.mean(kPitch)
     for i in range(len(nac)):
-        hi = seconds_to_acbin(1.0 / (kPitch[i] * 0.75), r)
-        lo = seconds_to_acbin(1.0 / (kPitch[i] * 1.5), r)
+        hi = pcm.seconds_to_acbin(1.0 / (kPitch[i] * 0.75))
+        lo = pcm.seconds_to_acbin(1.0 / (kPitch[i] * 1.5))
         rng = hi - lo
         loBin = np.max([lo, loACBin])
         hiBin = np.min([hi, hiACBin])
         m[i] = np.argmax(nac[i, loBin:hiBin]) + loBin
-        pitch[i] = 1.0 / acbin_to_seconds(m[i], r)
+        pitch[i] = 1.0 / pcm.acbin_to_seconds(m[i])
         fnac = np.max([nac[i, m[i]], 1e-6])
         fnac = np.min([fnac, 1.0 - 1e-6])
         if (nac[i, m[i]-1] > nac[i, m[i]]) or (nac[i, m[i]+1] > nac[i, m[i]]):
@@ -1155,8 +1160,8 @@ def pulse(n, ptype='impulse', params=None, derivative=True, rate=16000.0):
             pulse = ZeroFilter(pulse)
     elif ptype == 'lf':
         if not params:
-            #params = (1.2, 0.3, 700)  # Average male
-            params = (1.0, 0.3, 400)  # Average female
+            params = (1.2, 0.3, 700)  # Average male
+            #params = (1.0, 0.3, 400)  # Average female
         # Assume Ee = -1 and T = 1
         (Rg, Rk, Fa) = params
 
@@ -1191,17 +1196,17 @@ def pulse(n, ptype='impulse', params=None, derivative=True, rate=16000.0):
         pulse[0] = 1.0
         pulse = ZeroFilter(pulse, params)
     elif ptype == 'polezerofilter':
-        pulse[1] = 1.0
+        pulse[1] = -1.0
         pulse = PoleFilter(pulse, params[0])
         pulse = PoleFilter(pulse, params[0])
         pulse = ZeroFilter(pulse, params[1])
     elif ptype == 'polepairzerofilter':
-        pulse[1] = 1.0
-        pulse = PoleFilter(pulse, params[0])
+        pulse[1] = -1.0
+        #pulse = PoleFilter(pulse, params[0])
         pulse = PolePairFilter(pulse, params[0], params[1])
         pulse = ZeroFilter(pulse, params[2])
     else:
-        raise LookupError('Unknown pulse type ' + ptype)
+        raise LookupError('Unknown pulse type ' + str(ptype))
 
     # We want the total power in the pulse to average one for each
     # sample, so the power is the length of the pulse

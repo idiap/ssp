@@ -7,6 +7,7 @@
 # Author(s):
 #   Phil Garner, May 2012
 #
+import ssp
 from ssp import *
 from optparse import OptionParser
 from os.path import splitext
@@ -56,7 +57,7 @@ lpOrder = {
 }
 
 
-def encode(a):
+def encode(a, pcm):
     """
     Encode a speech waveform.  The encoding framers (frames and pitch)
     pad the frames so that the first frame is centered on sample zero.
@@ -73,7 +74,7 @@ def encode(a):
     # should be long with no window.  1024 at 16 kHz is 64 ms.
     pitchSize = 2048 #1024
     pf = Frame(a, size=pitchSize, period=framePeriod[r])
-    pitch, hnr = ACPitch(pf, r=r)
+    pitch, hnr = ACPitch(pf, pcm)
 
     # Keep f around after the function so the decoder can do a
     # reference decoding on the real excitaton.
@@ -83,7 +84,7 @@ def encode(a):
     aw = np.delete(aw, -1)
     w = Window(f, aw)
     ac = Autocorrelation(w)
-    lp = Parameter('AR', 'levinson')
+    lp = ssp.parameter('AR', 'levinson')
     if lp == 'levinson':
         ar, g = ARLevinson(ac, lpOrder[r])
     elif lp == 'ridge':
@@ -125,7 +126,7 @@ def decode((ar, g, pitch, hnr)):
         frameSize = framePeriod[r]
         nSamples = frameSize * (nFrames-1)
 
-    ex = Parameter('Excitation', 'synth')
+    ex = ssp.parameter('Excitation', 'synth')
 
     # Use the original AR residual; it should be a very good
     # reconstruction.
@@ -150,7 +151,7 @@ def decode((ar, g, pitch, hnr)):
     elif ex == 'synth':
         # Harmonic part
         mperiod = int(1.0 / np.mean(pitch) * r)
-        ptype = Parameter('Pulse', 'impulse')
+        ptype = ssp.parameter('Pulse', 'impulse')
         pr, pg = pulse_response(ptype, period=mperiod, order=lpOrder[r])
         h = np.zeros(nSamples)
         i = 0
@@ -229,16 +230,17 @@ def decode((ar, g, pitch, hnr)):
             if i + period > nSamples:
                 break
             weight = np.sqrt(hnr[frame] / (hnr[frame] + 1))
-            h[i:i+period] = pulse(period, "mipulse") * weight
+            h[i:i+period] = pulse(period, "impulse") * weight
             i += period
             frame = i // framePeriod[r]
 
         # Filter to mimic the glottal pulse
-        pole = Parameter("Pole", 0.97)
+        pole = ssp.parameter("Pole", 0.97)
         #h = PoleFilter(h, pole)
         #h = PoleFilter(h, pole)
-        h = PolePairFilter(h, pole, np.mean(pitch)/r * 2 * np.pi)
         h = ZeroFilter(h, 1.0)
+        h = PolePairFilter(h, pole, np.mean(pitch)/r * 2 * np.pi)
+        print h
         fh = Frame(h, size=frameSize, period=framePeriod[r])
         
 
@@ -251,7 +253,7 @@ def decode((ar, g, pitch, hnr)):
 
         # Combination
         assert(len(fh) == len(fn))        
-        hgain = Parameter("HGain", 1.0)
+        hgain = ssp.parameter("HGain", 1.0)
         e = fn + fh * hgain
         hnw = np.hanning(frameSize)
         for i in range(len(e)):
@@ -284,23 +286,20 @@ def decode((ar, g, pitch, hnr)):
 # Main loop over the file list
 #
 r = int(opt.rate)
+pcm = PulseCodeModulation(r)
 for pair in pairs:
     loadFile, saveFile = pair.strip().split()
 
     # Neither flag - assume a best effort copy
     if not (opt.encode or opt.decode):
-        rate, a = WavSource(loadFile)
-        if rate != r:
-            raise ValueError("Wrong sample rate")
-        d = decode(encode(a))
-        WavSink(d, saveFile, r)
+        a = pcm.WavSource(loadFile)
+        d = decode(encode(a, pcm))
+        pcm.WavSink(d, saveFile)
 
     # Encode to a file
     if opt.encode:
-        rate, a = WavSource(loadFile)
-        if rate != r:
-            raise ValueError("Wrong sample rate")
-        (ar, g, pitch, hnr) = encode(a)
+        a = pcm.WavSource(loadFile)
+        (ar, g, pitch, hnr) = encode(a, pcm)
 
         # The cepstrum part is just like HTK
         c = ARCepstrum(ar, g, lpOrder[r])
@@ -324,4 +323,4 @@ for pair in pairs:
         c, period = HTKSource(loadFile)
         (ar, g) = ARCepstrumToPoly(c)
         d = decode((ar, g, pitch, hnr))
-        WavSink(d, saveFile, r)
+        pcm.WavSink(d, saveFile)
