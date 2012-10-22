@@ -48,13 +48,6 @@ else:
         exit(1)
     pairs = [ ' '.join(arg) ]
 
-# Sample rate specific default parameters
-#framePeriod = {
-#    8000: 128,
-#    16000: 128,
-#    22050: 128  # 128 is too small for male speech
-#}
-
 lpOrder = {
     8000: 10,
     16000: 24,
@@ -70,12 +63,11 @@ def encode(a, pcm):
     means the pitch can have longer frame lengths and still align with
     the OLA'd frames.
     """
-    framePeriod = pcm.seconds_to_period(0.005, 'atleast') # 5ms period
     if opt.ola:
         frameSize = pcm.seconds_to_period(0.025, 'atleast') # 25ms frame size
     else:
         frameSize = framePeriod
-    pitchSize = pcm.seconds_to_period(0.05, 'atmost')
+    pitchSize = pcm.seconds_to_period(0.1, 'atmost')
     print "Encoding with period", framePeriod, "size", frameSize, \
           "and pitch window", pitchSize
 
@@ -128,7 +120,6 @@ def decode((ar, g, pitch, hnr)):
 
     # The original framer padded the ends so the number of samples to
     # synthesise is a bit less than you might think
-    framePeriod = pcm.seconds_to_period(0.005, 'atleast') # 5ms period
     if opt.ola:
         frameSize = framePeriod * 2
         nSamples = framePeriod * (nFrames-1)
@@ -302,6 +293,8 @@ r = int(opt.rate)
 pcm = PulseCodeModulation(r)
 if opt.framePeriod:
     framePeriod = opt.framePeriod
+else:
+    framePeriod = pcm.seconds_to_period(0.005, 'atleast') # 5ms period
 
 for pair in pairs:
     loadFile, saveFile = pair.strip().split()
@@ -320,7 +313,6 @@ for pair in pairs:
 
         # The cepstrum part is just like HTK
         c = ARCepstrum(ar, g, lpOrder[r])
-        framePeriod = pcm.seconds_to_period(0.005, 'atleast') # 5ms period
         period = float(framePeriod)/r
         HTKSink(saveFile, c, period)
 
