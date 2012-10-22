@@ -88,6 +88,25 @@ class PulseCodeModulation:
     def __init__(self, rate=None):
         self.rate = rate
 
+    def WavSource(self, file):
+        """ Reads a wav file into a numpy array """
+        rate, audio = wavfile.read(file)
+        if audio.dtype == 'int16':
+            audio = np.cast['float'](audio)
+            audio /= 32768
+        if self.rate is None:
+            self.rate = rate
+        elif self.rate != rate:
+            raise ValueError("WavSource: Wrong sample rate")
+        return audio
+
+    def WavSink(self, a, file):
+        """ Writes a numpy array to a 16 bit wav file """
+        audio = a * 32768
+        audio = np.cast['int16'](audio)
+        wavfile.write(file, self.rate, audio)
+        return a
+
     def speech_ar_order(self):
         """ The rationale here is purely a rule of thumb. """
         if self.rate is None:
@@ -110,25 +129,24 @@ class PulseCodeModulation:
         """ Returns the lag corresponding to a given autocorrelation bin """
         return float(b) / self.rate
 
-    def WavSource(self, file):
-        """ Reads a wav file into a numpy array """
-        rate, audio = wavfile.read(file)
-        if audio.dtype == 'int16':
-            audio = np.cast['float'](audio)
-            audio /= 32768
-        if self.rate is None:
-            self.rate = rate
-        elif self.rate != rate:
-            raise ValueError("WavSource: Wrong sample rate")
-        return audio
-
-    def WavSink(self, a, file):
-        """ Writes a numpy array to a 16 bit wav file """
-        audio = a * 32768
-        audio = np.cast['int16'](audio)
-        wavfile.write(file, self.rate, audio)
-        return a
-
+    def seconds_to_period(self, sec, power=None):
+        """
+        Returns a number of samples corresponding to the given time.
+        If power is 'atleast' then it is rounded up to the next power
+        of 2; 'atmost' rounds down to the previous power of 2.
+        """
+        period = self.rate * sec
+        if power is None:
+            return int(period)
+            
+        # May be faster than log2()
+        s = 1
+        while s < period:
+            s *= 2
+        if s == period or power == 'atleast':
+            return s
+        else:
+            return s/2
 
 class Autoregression:
     """

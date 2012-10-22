@@ -44,11 +44,11 @@ else:
     pairs = [ ' '.join(arg) ]
 
 # Sample rate specific default parameters
-framePeriod = {
-    8000: 128,
-    16000: 128,
-    22050: 128
-}
+#framePeriod = {
+#    8000: 128,
+#    16000: 128,
+#    22050: 128  # 128 is too small for male speech
+#}
 
 lpOrder = {
     8000: 10,
@@ -65,22 +65,26 @@ def encode(a, pcm):
     means the pitch can have longer frame lengths and still align with
     the OLA'd frames.
     """
+    framePeriod = pcm.seconds_to_period(0.005, 'atleast') # 5ms period
     if opt.ola:
-        frameSize = framePeriod[r] * 2
+        frameSize = pcm.seconds_to_period(0.025, 'atleast') # 25ms frame size
     else:
-        frameSize = framePeriod[r]
+        frameSize = framePeriod
+    pitchSize = pcm.seconds_to_period(0.05, 'atmost')
+    print "Encoding with period", framePeriod, "size", frameSize, \
+          "and pitch window", pitchSize
 
     # First the pitch as it's on the unaltered waveform.  The frame
     # should be long with no window.  1024 at 16 kHz is 64 ms.
-    pitchSize = 2048 #1024
-    pf = Frame(a, size=pitchSize, period=framePeriod[r])
+    pf = Frame(a, size=pitchSize, period=framePeriod)
     pitch, hnr = ACPitch(pf, pcm)
 
     # Keep f around after the function so the decoder can do a
     # reference decoding on the real excitaton.
     global f
-    f = Frame(a, size=frameSize, period=framePeriod[r])
-    aw = np.hanning(frameSize+1)
+    f = Frame(a, size=frameSize, period=framePeriod)
+    #aw = np.hanning(frameSize+1)
+    aw = ssp.nuttall(frameSize+1)
     aw = np.delete(aw, -1)
     w = Window(f, aw)
     ac = Autocorrelation(w)
@@ -119,11 +123,12 @@ def decode((ar, g, pitch, hnr)):
 
     # The original framer padded the ends so the number of samples to
     # synthesise is a bit less than you might think
+    framePeriod = pcm.seconds_to_period(0.005, 'atleast') # 5ms period
     if opt.ola:
-        frameSize = framePeriod[r] * 2
-        nSamples = framePeriod[r] * (nFrames-1)
+        frameSize = framePeriod * 2
+        nSamples = framePeriod * (nFrames-1)
     else:
-        frameSize = framePeriod[r]
+        frameSize = framePeriod
         nSamples = frameSize * (nFrames-1)
 
     ex = ssp.parameter('Excitation', 'synth')
@@ -144,7 +149,7 @@ def decode((ar, g, pitch, hnr)):
         period = int(1.0 / 200 * r)
         for i in range(0, len(ew), period):
             ew[i] = period
-        e = Frame(ew, size=frameSize, period=framePeriod[r])        
+        e = Frame(ew, size=frameSize, period=framePeriod)        
 
     # Synthesise harmonics plus noise in the ratio suggested by the
     # HNR.
@@ -163,17 +168,19 @@ def decode((ar, g, pitch, hnr)):
             weight = np.sqrt(hnr[frame] / (hnr[frame] + 1))
             h[i:i+period] = pulse(period, ptype, rate=r) * weight
             i += period
-            frame = i // framePeriod[r]
+            frame = i // framePeriod
         h = ARExcitation(h, pr, 1.0)
-        fh = Frame(h, size=frameSize, period=framePeriod[r])
+        fh = Frame(h, size=frameSize, period=framePeriod)
 
         # Noise part
         n = np.random.normal(size=nSamples)
         n = ZeroFilter(n, 1.0) # Include the radiation impedance
-        fn = Frame(n, size=frameSize, period=framePeriod[r])
+        fn = Frame(n, size=frameSize, period=framePeriod)
         for i in range(len(fn)):
             fn[i] *= np.sqrt(1.0 / (hnr[i] + 1))
-        e = fn + fh
+
+        hgain = ssp.parameter("HGain", 1.0)
+        e = fn + fh * hgain
 
     # Like harmonics plus noise, but with explicit sinusoids instead
     # of time domain impulses.
@@ -181,15 +188,15 @@ def decode((ar, g, pitch, hnr)):
         order = 20
         sine = Harmonics(r, order)
         h = np.zeros(nSamples)
-        for i in range(0, len(h)-framePeriod[r], framePeriod[r]):
-            frame = i // framePeriod[r]
+        for i in range(0, len(h)-framePeriod, framePeriod):
+            frame = i // framePeriod
             period = int(1.0 / pitch[frame] * r)
             weight = np.sqrt(hnr[frame] / (hnr[frame] + 1))
-            h[i:i+framePeriod[r]] = ( sine.sample(pitch[frame], framePeriod[r])
+            h[i:i+framePeriod] = ( sine.sample(pitch[frame], framePeriod)
                                       * weight )
-        fh = Frame(h, size=frameSize, period=framePeriod[r])
+        fh = Frame(h, size=frameSize, period=framePeriod)
         n = np.random.normal(size=nSamples)
-        fn = Frame(n, size=frameSize, period=framePeriod[r])
+        fn = Frame(n, size=frameSize, period=framePeriod)
         for i in range(len(fn)):
             fn[i] *= np.sqrt(1.0 / (hnr[i] + 1))
         e = fn + fh*10
@@ -200,7 +207,7 @@ def decode((ar, g, pitch, hnr)):
     elif ex == 'holp':
         # Some noise
         n = np.random.normal(size=nSamples)
-        fn = Frame(n, size=frameSize, period=framePeriod[r])
+        fn = Frame(n, size=frameSize, period=framePeriod)
 
         # Use the noise to excite a high order AR model
         fh = np.ndarray(fn.shape)
@@ -222,6 +229,7 @@ def decode((ar, g, pitch, hnr)):
     # flattened using AR.
     elif ex == 'shaped':
         # Harmonic part
+        ptype = ssp.parameter('Pulse', 'impulse')
         h = np.zeros(nSamples)
         i = 0
         frame = 0
@@ -230,24 +238,24 @@ def decode((ar, g, pitch, hnr)):
             if i + period > nSamples:
                 break
             weight = np.sqrt(hnr[frame] / (hnr[frame] + 1))
-            h[i:i+period] = pulse(period, "impulse") * weight
+            h[i:i+period] = pulse(period, ptype) * weight
             i += period
-            frame = i // framePeriod[r]
+            frame = i // framePeriod
 
         # Filter to mimic the glottal pulse
-        pole = ssp.parameter("Pole", 0.97)
-        #h = PoleFilter(h, pole)
-        #h = PoleFilter(h, pole)
-        h = ZeroFilter(h, 1.0)
-        h = PolePairFilter(h, pole, np.mean(pitch)/r * 2 * np.pi)
-        print h
-        fh = Frame(h, size=frameSize, period=framePeriod[r])
+        pole = ssp.parameter("Pole", None)
+        if pole is not None:
+            #h = PoleFilter(h, pole)
+            #h = PoleFilter(h, pole)
+            h = ZeroFilter(h, 1.0)
+            h = PolePairFilter(h, pole, np.mean(pitch)/r * 2 * np.pi)
+        fh = Frame(h, size=frameSize, period=framePeriod)
         
 
         # Noise part
         n = np.random.normal(size=nSamples)
         n = ZeroFilter(n, 1.0) # Include the radiation impedance
-        fn = Frame(n, size=frameSize, period=framePeriod[r])
+        fn = Frame(n, size=frameSize, period=framePeriod)
         for i in range(len(fn)):
             fn[i] *= np.sqrt(1.0 / (hnr[i] + 1))
 
@@ -303,7 +311,8 @@ for pair in pairs:
 
         # The cepstrum part is just like HTK
         c = ARCepstrum(ar, g, lpOrder[r])
-        period = float(framePeriod[r])/r
+        framePeriod = pcm.seconds_to_period(0.005, 'atleast') # 5ms period
+        period = float(framePeriod)/r
         HTKSink(saveFile, c, period)
 
         # F0 and HNR are both text formats

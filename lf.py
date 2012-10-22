@@ -18,7 +18,7 @@ w = 1024
 types = (
     ## ('lf', (1.0, 0.3, 100)),
     ('lf', (1.0, 0.3, 900)),
-    ## ('lf', (1.0, 0.3, 400)),
+    ('lf', (1.0, 0.3, 400)),
     ## ('lf', (1.3, 0.3, 400)),
     ## ('lf', (1.0, 0.1, 400)),
     ## ('lf', (1.0, 0.3, 400)),
@@ -26,10 +26,10 @@ types = (
     ## ('invexp', None),
     ('polefilter', (0.97)),
     ('polefilter', (0.9)),
-    ('polezerofilter', (0.97, 1.0)),
-    ('polezerofilter', (0.95, 1.0)),
-    ('polepairzerofilter', (0.95, angle, 1.0)),
-    ('polepairzerofilter', (0.93, angle, 1.0))
+    ('polezerofilter', (1.02, 1.0)),
+    ('polezerofilter', (1.05, 1.0)),
+    ('polepairzerofilter', (1.05, angle * 0.4, 1.0)),
+    ('polepairzerofilter', (1.05, angle * 2.6, 1.0))
     )
 
 fig = Figure(len(types), 3)
@@ -56,7 +56,8 @@ for pulseType, params in types:
     ax3.plot(ex)
 
     ax1.set_xlim(0, w)
-    ax2.set_xlim(0, w/2+1)
+    #ax2.set_xlim(0, w/2+1)
+    ax2.set_xlim(0, 100)
     ax2.set_ylim(-60, 0)
     ax3.set_xlim(0, w)
 
