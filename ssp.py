@@ -505,16 +505,16 @@ def ARExcitation(a, ar, g):
     return r
 
 # AR resynthesis filter
-def ARResynthesis(e, ar, g):
+def ARResynthesis(e, ar, gg):
     if e.ndim > 1:
         ret = np.ndarray(e.shape)
         for f in range(e.shape[0]):
-            ret[f] = ARResynthesis(e[f], ar[f], g[f])
+            ret[f] = ARResynthesis(e[f], ar[f], gg[f])
         return ret
 
     c = ar[::-1]
     r = np.ndarray(len(e))
-    g = np.sqrt(g)
+    g = np.sqrt(gg)
     r[0] = e[0]*g
     for i in range(1,len(e)):
         if i < len(c):
@@ -523,8 +523,28 @@ def ARResynthesis(e, ar, g):
             r[i] = e[i]*g + np.dot(r[i-len(c):i], c)
     return r
 
+# AR resynthesis filter; assuming later overlap-add
+def ARResynthesis2(e, ar, gg):
+    assert(e.ndim == 2) # Should iterate down to this
+    ret = np.ndarray(e.shape)
+    for f in range(len(e)):
+        c = ar[f,::-1]
+        g = np.sqrt(gg[f])
+        ret[f,0] = e[f,0]*g
+        for i in range(1,len(e[f])):
+            if i < len(c):
+                ret[f,i] = e[f,i]*g + np.dot(ret[f,:i], c[-i:])
+                if f >= 1:
+                    # Complete using outputs of previous OLA frame
+                    k = len(c) - i
+                    j = len(e[f])/2
+                    ret[f,i] += np.dot(ret[f-1,j-k:j], c[:k])
+            else:
+                ret[f,i] = e[f,i]*g + np.dot(ret[f,i-len(c):i], c)
+    return ret
+
 # Sparse AR analysis
-def ARSparse(a, order=10):
+def ARSparse(a, order=10, gamma=1.414):
     if a.ndim > 1:
         ret = np.ndarray((a.shape[0], order))
         gain = np.ndarray(a.shape[0])
@@ -534,8 +554,8 @@ def ARSparse(a, order=10):
 
     # Follow the matrix based method to the letter.  elop contains the
     # poles reversed, coef is the poles in order.
-    # Initialise with ML
-    gamma = 1
+    
+    iter_gamma = 1  # Initialise with ML
     X = np.identity(len(a)-order)
     for iter in range(5):
         Y = np.dot(X, Frame(a[:a.size-1], size=order, period=1, pad=False))
@@ -544,14 +564,13 @@ def ARSparse(a, order=10):
         Yy = np.dot(Y.T,y)
         elop = np.dot(linalg.inv(YY), Yy)
         coef = elop[::-1]
-        gain = gamma * (np.dot(y,y) - np.dot(elop,Yy)) / y.size
+        gain = iter_gamma * (np.dot(y,y) - np.dot(elop,Yy)) / y.size
         exn = ARExcitation(a, coef, gain)
         #print iter, linalg.norm(exn[order:], ord=1)
         for i in range(len(exn)):
             exn[i] = max(abs(exn[i]),1e-6)
         X = np.diag(1 / np.sqrt(exn[order:]))
-        gamma = np.sqrt(2)
-        #gamma = 2
+        iter_gamma = gamma  # Continue iteration with supplied gamma
 
     return (coef, gain)
 
