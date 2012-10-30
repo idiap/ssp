@@ -9,9 +9,10 @@
 #
 from ssp import *
 
+pcm = PulseCodeModulation(16000)
 F0 = 100.0
-period = 16000/F0
-angle = F0/16000 * 2 * np.pi
+period = pcm.rate/F0
+angle = F0/pcm.rate * 2 * np.pi
 order = 18
 
 w = 1024
@@ -36,7 +37,8 @@ fig = Figure(len(types), 3)
 
 for pulseType, params in types:
     # Pulse train
-    p = pulse(period, pulseType, params)
+    gm = GlottalModel(pulseType, params)
+    p = gm.pulse(period, pcm)
     p = np.tile(p, int(w/period+1))
     ax1 = fig.subplot()
     ax1.plot(p[:w])

@@ -152,8 +152,8 @@ def decode((ar, g, pitch, hnr)):
     elif ex == 'synth':
         # Harmonic part
         mperiod = int(1.0 / np.mean(pitch) * r)
-        ptype = ssp.parameter('Pulse', 'impulse')
-        pr, pg = pulse_response(ptype, period=mperiod, order=lpOrder[r])
+        gm = GlottalModel(ssp.parameter('Pulse', 'impulse'))
+        pr, pg = pulse_response(gm, pcm, period=mperiod, order=lpOrder[r])
         h = np.zeros(nSamples)
         i = 0
         frame = 0
@@ -162,7 +162,7 @@ def decode((ar, g, pitch, hnr)):
             if i + period > nSamples:
                 break
             weight = np.sqrt(hnr[frame] / (hnr[frame] + 1))
-            h[i:i+period] = pulse(period, ptype, rate=r) * weight
+            h[i:i+period] = gm.pulse(period, pcm) * weight
             i += period
             frame = i // framePeriod
         h = ARExcitation(h, pr, 1.0)
@@ -225,7 +225,7 @@ def decode((ar, g, pitch, hnr)):
     # flattened using AR.
     elif ex == 'shaped':
         # Harmonic part
-        ptype = ssp.parameter('Pulse', 'impulse')
+        gm = GlottalModel(ssp.parameter('Pulse', 'impulse'))
         h = np.zeros(nSamples)
         i = 0
         frame = 0
@@ -234,7 +234,7 @@ def decode((ar, g, pitch, hnr)):
             if i + period > nSamples:
                 break
             weight = np.sqrt(hnr[frame] / (hnr[frame] + 1))
-            h[i:i+period] = pulse(period, ptype) * weight
+            h[i:i+period] = gm.pulse(period, pcm) * weight
             i += period
             frame = i // framePeriod
 
