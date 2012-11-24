@@ -152,6 +152,11 @@ class PulseCodeModulation:
         else:
             return s/2
 
+    def hertz_to_radians(self, hz):
+        """ Returns the angle corresponding to a value in Hertz """
+        return float(hz) / float(self.rate) * np.pi * 2
+
+
 class Autoregression:
     """
     Class containing autoregression methods; requires an order.  The
@@ -272,7 +277,7 @@ def Harmonogram(a, input=None, norm=False):
     return ret
 
 
-def Autocorrelation(a, input=None):
+def Autocorrelation(a, power=2, input=None):
     """
     Calculate autocorrelation.  Default is assume framed time samples
     as input, but input=psd indicates periodogram input.  Returns an
@@ -288,7 +293,7 @@ def Autocorrelation(a, input=None):
         if input == 'psd':
             dpsd = np.append(i, i[-2:0:-1])
         else:
-            dpsd = abs(np.fft.fft(i))**2
+            dpsd = abs(np.fft.fft(i))**power
         dft = np.fft.ifft(dpsd)[:size]
         o[...] = np.real(dft)/dpsd.size
     return ret
@@ -1156,9 +1161,10 @@ class GlottalModel:
             if params is not None:
                 (self.Rg, self.Rk, self.Fa) = params
             else:
-                self.Rg = parameter('Rg', 1.2)
-                self.Rk = parameter('Rk', 0.3)
-                self.Fa = parameter('Fa', 700)
+                # Defaults tested on emime/EF2
+                self.Rg = parameter('Rg', 1.0)
+                self.Rk = parameter('Rk', 0.2)
+                self.Fa = parameter('Fa', 200)
         elif self.ptype == 'zerofilter':
             if params is not None:
                 (self.zero) = params
@@ -1268,15 +1274,18 @@ class GlottalModel:
             pulse[0] = 1.0
             pulse = ZeroFilter(pulse, self.zero)
         elif self.ptype == 'polezerofilter':
-            pulse[1] = -1.0
+            pulse[1] = 1.0
             pulse = PoleFilter(pulse, self.pole)
             pulse = PoleFilter(pulse, self.pole)
             pulse = ZeroFilter(pulse, self.zero)
         elif self.ptype == 'polepairzerofilter':
-            pulse[1] = -1.0
+            pulse[1] = 1.0
             #pulse = PoleFilter(pulse, params[0])
             pulse = PolePairFilter(pulse, self.pole, self.angle)
             pulse = ZeroFilter(pulse, self.zero)
+        elif self.ptype == 'multipulse':
+            for i in range(24):
+                pulse[i] = 1
         else:
             raise LookupError('Unknown pulse type ' + str(self.ptype))
 

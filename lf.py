@@ -18,19 +18,22 @@ order = 18
 w = 1024
 types = (
     ## ('lf', (1.0, 0.3, 100)),
-    ('lf', (1.0, 0.3, 900)),
-    ('lf', (1.0, 0.3, 400)),
+    #('lf', (1.0, 0.2, 900)),
+    ('lf', (1.0, 0.2, 200)),
+    ('lf', (2.0, 0.2, 200)),
+    ('lf', (3.0, 0.2, 200)),
     ## ('lf', (1.3, 0.3, 400)),
     ## ('lf', (1.0, 0.1, 400)),
     ## ('lf', (1.0, 0.3, 400)),
     ## ('impulse', None),
     ## ('invexp', None),
-    ('polefilter', (0.97)),
-    ('polefilter', (0.9)),
-    ('polezerofilter', (1.02, 1.0)),
-    ('polezerofilter', (1.05, 1.0)),
-    ('polepairzerofilter', (1.05, angle * 0.4, 1.0)),
-    ('polepairzerofilter', (1.05, angle * 2.6, 1.0))
+    #('polefilter', (0.95)),
+    ('polefilter', (0.99)),
+    #('polezerofilter', (0.95, 1.0)),
+    ('polezerofilter', (0.99, 1.0)),
+    #('polepairzerofilter', (0.95, angle, 1.0)),
+    ('polepairzerofilter', (0.99, angle, 1.0)),
+    ('multipulse', None)
     )
 
 fig = Figure(len(types), 3)

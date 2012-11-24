@@ -76,6 +76,11 @@ def encode(a, pcm):
     pf = Frame(a, size=pitchSize, period=framePeriod)
     pitch, hnr = ACPitch(pf, pcm)
 
+    # Pre-emphasis
+    pre = ssp.parameter("Pre", None)
+    if pre is not None:
+        a = PoleFilter(a, pre) / 5
+
     # Keep f around after the function so the decoder can do a
     # reference decoding on the real excitaton.
     global f
@@ -91,9 +96,9 @@ def encode(a, pcm):
     elif lp == 'ridge':
         ar, g = ARRidge(ac, lpOrder[r], 0.03)
     elif lp == 'lasso':
-        ar, g = ARLasso(ac, lpOrder[r], 10)
+        ar, g = ARLasso(ac, lpOrder[r], 5)
     elif lp == 'sparse':
-        ar, g = ARSparse(f, lpOrder[r])
+        ar, g = ARSparse(f, lpOrder[r], ssp.parameter('Gamma', 1.414))
 
     if False:
         fig = Figure(5, 1)
@@ -239,18 +244,21 @@ def decode((ar, g, pitch, hnr)):
             frame = i // framePeriod
 
         # Filter to mimic the glottal pulse
-        pole = ssp.parameter("Pole", None)
+        #pole = ssp.parameter("Pole", None)
+        pole = None
         if pole is not None:
             #h = PoleFilter(h, pole)
             #h = PoleFilter(h, pole)
+            h = ZeroFilter(h, -1.0)
+            h = ZeroFilter(h, -0.5)
             h = ZeroFilter(h, 1.0)
-            h = PolePairFilter(h, pole, np.mean(pitch)/r * 2 * np.pi)
+            h = PolePairFilter(h, pole, pcm.hertz_to_radians(np.mean(pitch)))
         fh = Frame(h, size=frameSize, period=framePeriod)
-        
 
         # Noise part
         n = np.random.normal(size=nSamples)
-        n = ZeroFilter(n, 1.0) # Include the radiation impedance
+        zero = ssp.parameter("NoiseZero", 1.0)
+        n = ZeroFilter(n, zero) # Include the radiation impedance
         fn = Frame(n, size=frameSize, period=framePeriod)
         for i in range(len(fn)):
             fn[i] *= np.sqrt(1.0 / (hnr[i] + 1))
@@ -299,7 +307,6 @@ else:
 for pair in pairs:
     loadFile, saveFile = pair.strip().split()
 
-    print "%s" % saveFile
     # Neither flag - assume a best effort copy
     if not (opt.encode or opt.decode or opt.pitch):
         a = pcm.WavSource(loadFile)
