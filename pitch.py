@@ -35,22 +35,24 @@ if len(arg) > 1:
     tempo = np.loadtxt(arg[1])
 
 # Load and process
-r, a = WavSource(wavFile)
+pcm = PulseCodeModulation()
+a = pcm.WavSource(wavFile)
+#r, a = wavfile.read(wavFile)
 
 # Default to 8k
 fs = 512
 fp = 256
-if r == 16000:
+if pcm.rate == 16000:
     fs = 1024
     fp = 128
-if r == 22050:
+if pcm.rate == 22050:
     fs = 2048
     fp = 256
-elif r == 96000:
+elif pcm.rate == 96000:
     fs = 8192
     fp = 160
 
-print "Frame period", fp, "is", fp/float(r)*1000, "ms, or", float(r) / fp, "Hz"
+print "Frame period", fp, "is", fp/float(pcm.rate)*1000, "ms, or", float(pcm.rate) / fp, "Hz"
 
 loPitch = 40
 hiPitch = 500
@@ -58,12 +60,12 @@ hiPitch = 500
 loPeriod = 1.0 / loPitch
 hiPeriod = 1.0 / hiPitch
 
-loDFTBin = hertz_to_dftbin(loPitch, fs, r)
-hiDFTBin = hertz_to_dftbin(hiPitch, fs, r)
+loDFTBin = pcm.hertz_to_dftbin(loPitch, fs)
+hiDFTBin = pcm.hertz_to_dftbin(hiPitch, fs)
 print "Pitch range is bins", loDFTBin, "to", hiDFTBin
 
-loACBin = seconds_to_acbin(hiPeriod, r)
-hiACBin = seconds_to_acbin(loPeriod, r)
+loACBin = pcm.seconds_to_acbin(hiPeriod)
+hiACBin = pcm.seconds_to_acbin(loPeriod)
 print "Period range is bins", loACBin, "to", hiACBin
 
 # The AC bin for the period of the lowest frequency needs to be
@@ -88,9 +90,9 @@ fig = Figure(5,1)
 #pSpec = fig.subplot()
 #specplot(pSpec, p, r)
 sSpec = fig.subplot()
-specplot(sSpec, p[:,:hertz_to_dftbin(hiPitch, fs, r)], hiPitch*2)
+specplot(sSpec, p[:,:pcm.hertz_to_dftbin(hiPitch, fs)], hiPitch*2)
 
-method = Parameter('Method', 'ac')
+method = parameter('Method', 'ac')
 
 if method == 'ac':
     if False:
@@ -103,7 +105,7 @@ if method == 'ac':
         p = Periodogram(f)
 
     # Autocorrelation method, loosely after Boersma
-    ac = Autocorrelation(p, 'psd')
+    ac = Autocorrelation(p, 2, 'psd')
     for i in range(len(ac)):
         ac[i] /= ac[i, 0]
     wac = Autocorrelation(w)
@@ -131,7 +133,7 @@ if method == 'ac':
     var = np.ndarray(len(m))
     prange = hiPitch - loPitch
     for i in range(len(m)):
-        pitch[i] = 1.0 / acbin_to_seconds(m[i], r)
+        pitch[i] = 1.0 / pcm.acbin_to_seconds(m[i])
         fnac = np.max([nac[i, m[i]], 1e-6])
         if (nac[i, m[i]-1] > nac[i, m[i]]) or (nac[i, m[i]+1] > nac[i, m[i]]):
             # No peak found; set HNR small
@@ -166,13 +168,13 @@ if method == 'ac':
     # Now run it again, but with tighter limits
     mpitch = np.mean(kPitch)
     for i in range(len(nac)):
-        hi = seconds_to_acbin(1.0 / (kPitch[i] * 0.75), r)
-        lo = seconds_to_acbin(1.0 / (kPitch[i] * 1.5), r)
+        hi = pcm.seconds_to_acbin(1.0 / (kPitch[i] * 0.75))
+        lo = pcm.seconds_to_acbin(1.0 / (kPitch[i] * 1.5))
         rng = hi - lo
         loBin = np.max([lo, loACBin])
         hiBin = np.min([hi, hiACBin])
         m[i] = np.argmax(nac[i, loBin:hiBin]) + loBin
-        pitch[i] = 1.0 / acbin_to_seconds(m[i], r)
+        pitch[i] = 1.0 / pcm.acbin_to_seconds(m[i])
         fnac = np.max([nac[i, m[i]], 1e-6])
         if (nac[i, m[i]-1] > nac[i, m[i]]) or (nac[i, m[i]+1] > nac[i, m[i]]):
             # No peak found; set HNR small
@@ -199,7 +201,7 @@ if method == 'ac':
 elif method == 'ar':
     # Low order AR
     order = 15
-    a = Autocorrelation(w)
+    a = Autocorrelation(wf)
     la, lg = ARLevinson(a, order)
     f = ARExcitation(f, la, lg)
 
@@ -213,8 +215,8 @@ elif method == 'ar':
 
     epSpec = fig.subplot()
     lSpec = fig.subplot()
-    specplot(epSpec, ep[:,:ep.shape[1]/2+1], r)
-    specplot(lSpec, l, r)
+    specplot(epSpec, ep[:,:ep.shape[1]/2+1], pcm.rate)
+    specplot(lSpec, l, pcm.rate)
 
     c = ARPoly(a)
     m, s = ARAngle(c)
@@ -222,9 +224,9 @@ elif method == 'ar':
     if 1:
         rSpec = fig.subplot()
         rSpec.set_xlim(0, len(m)-1)
-        rSpec.plot(m / np.pi * r, 'r')
-        rSpec.plot((m+s) / np.pi * r, 'b')
-        rSpec.plot((m-s) / np.pi * r, 'b')
+        rSpec.plot(m / np.pi * pcm.rate, 'r')
+        rSpec.plot((m+s) / np.pi * pcm.rate, 'b')
+        rSpec.plot((m-s) / np.pi * pcm.rate, 'b')
     else:
         f = Parameter("Frame", 10)
         zplot(fig, c[f])
@@ -232,7 +234,7 @@ elif method == 'ar':
 elif method == 'map':
     h = Harmonogram(p, 'psd')
     hSpec = fig.subplot()
-    specplot(hSpec, h, r)
+    specplot(hSpec, h, pcm.rate)
 
     # Low order AR
     order = 15
@@ -242,7 +244,7 @@ elif method == 'map':
 
     eh = Harmonogram(e)
     ehSpec = fig.subplot()
-    specplot(ehSpec, eh, r)
+    specplot(ehSpec, eh, pcm.rate)
 
     frame = Parameter('Frame', 1)
     rSpec = fig.subplot()
