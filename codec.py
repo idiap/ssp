@@ -333,7 +333,7 @@ for pair in pairs:
     # Encode cont. pitch only to a file
     if opt.pitch:
         a = pcm.WavSource(loadFile)
-        (ar, g, pitch, hnr) = encode(a)
+        (ar, g, pitch, hnr) = encode(a, pcm)
 
         # F0 and HNR are both text formats
         np.savetxt(saveFile, pitch)
