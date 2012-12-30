@@ -12,4 +12,9 @@ SSP - Speech Signal Processing.  Uses numpy and scipy to implement
 some functions geared towards speech processing.
 """
 
+# Core should be imported into the namespace
 from .core import *
+
+# Others should probably not go into this namespace, but...
+from .ar import *
+from .gm import *
