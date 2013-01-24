@@ -231,6 +231,7 @@ def decode((ar, g, pitch, hnr)):
     elif ex == 'shaped':
         # Harmonic part
         gm = GlottalModel(ssp.parameter('Pulse', 'impulse'))
+        gm.angle = pcm.hertz_to_radians(np.mean(pitch)*0.5)
         h = np.zeros(nSamples)
         i = 0
         frame = 0
@@ -259,6 +260,8 @@ def decode((ar, g, pitch, hnr)):
         n = np.random.normal(size=nSamples)
         zero = ssp.parameter("NoiseZero", 1.0)
         n = ZeroFilter(n, zero) # Include the radiation impedance
+        n = PolePairFilter(n, 0.99, pcm.hertz_to_radians(2000))
+        #n = PoleFilter(n, -0.99)
         fn = Frame(n, size=frameSize, period=framePeriod)
         for i in range(len(fn)):
             fn[i] *= np.sqrt(1.0 / (hnr[i] + 1))
