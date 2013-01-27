@@ -7,6 +7,7 @@
 #   Phil Garner, December 2012
 #
 import numpy as np
+import numpy.linalg as linalg
 import ssp
 
 class Autoregression:
@@ -89,7 +90,7 @@ def ARLevinson(ac, order=10):
         for f in range(ac.shape[0]):
             ret[f], gain[f] = ARLevinson(ac[f], order)
         return ret, gain
-    
+
     coef = levinson(ac, order)
     gain = ac[0] - np.dot(coef, ac[1:order+1])
     return coef, gain
@@ -112,7 +113,7 @@ def ARRidge(ac, order=10, ridge=0.0):
         for f in range(ac.shape[0]):
             ret[f], gain[f] = ARRidge(ac[f], order, ridge)
         return ret, gain
-    
+
     coef = levinson(ac, order, ridge*ac[0])
     YY, Yy = ACToMatrix(ac, order)
     gain = ac[0] + np.dot(coef, (np.dot(YY, coef) - 2*Yy)) / ac.size
@@ -126,7 +127,7 @@ def ARLasso(ac, order=10, ridge=0.0):
         for f in range(ac.shape[0]):
             ret[f], gain[f] = ARLasso(ac[f], order, ridge)
         return ret, gain
-    
+
     # Convert ac into matrices
     YY, Yy = ACToMatrix(ac, order)
 
@@ -163,7 +164,7 @@ def ARSpectrum(a, g, nSpec=256, twiddle=None):
         for f in range(a.shape[0]):
             ret[f] = ARSpectrum(a[f], g[f], nSpec, twiddle)
         return ret
-    
+
     spec = np.ndarray(nSpec)
     for i in range(nSpec):
         sm = np.dot(a,twiddle[i])
@@ -216,20 +217,22 @@ def ARCepstrumToPoly(cep, order=None):
     return ar, ag.reshape(newshape(cep.shape))
 
 # AR excitation filter
-def ARExcitation(a, ar, g):
+def ARExcitation(a, ar, gg):
     if a.ndim > 1:
         ret = np.ndarray(a.shape)
         for f in range(a.shape[0]):
-            ret[f] = ARExcitation(a[f], ar[f], g[f])
+            ret[f] = ARExcitation(a[f], ar[f], gg[f])
         return ret
 
+    # I think this may be negative version
     c = np.append(-ar[::-1], 1)
     r = np.ndarray(len(a))
+    g = 1.0 / np.sqrt(gg)
     for i in range(len(a)):
         if i < len(c):
-            r[i] = np.dot(a[:i+1], c[-i-1:]) / np.sqrt(g)
+            r[i] = np.dot(a[:i+1], c[-i-1:]) * g
         else:
-            r[i] = np.dot(a[i-len(c)+1:i+1], c) / np.sqrt(g)
+            r[i] = np.dot(a[i-len(c)+1:i+1], c) * g
     return r
 
 # AR resynthesis filter
@@ -271,7 +274,7 @@ def ARResynthesis2(e, ar, gg):
                 ret[f,i] = e[f,i]*g + np.dot(ret[f,i-len(c):i], c)
     return ret
 
-# Sparse AR analysis
+# Sparse AR analysis assuming the excitation is distributed Laplacian.
 def ARSparse(a, order=10, gamma=1.414):
     if a.ndim > 1:
         ret = np.ndarray((a.shape[0], order))
@@ -282,7 +285,7 @@ def ARSparse(a, order=10, gamma=1.414):
 
     # Follow the matrix based method to the letter.  elop contains the
     # poles reversed, coef is the poles in order.
-    
+
     iter_gamma = 1  # Initialise with ML
     X = np.identity(len(a)-order)
     for iter in range(5):
@@ -292,6 +295,7 @@ def ARSparse(a, order=10, gamma=1.414):
         Yy = np.dot(Y.T,y)
         elop = np.dot(linalg.inv(YY), Yy)
         coef = elop[::-1]
+        # WRONG!
         gain = iter_gamma * (np.dot(y,y) - np.dot(elop,Yy)) / y.size
         exn = ARExcitation(a, coef, gain)
         #print iter, linalg.norm(exn[order:], ord=1)
@@ -299,6 +303,36 @@ def ARSparse(a, order=10, gamma=1.414):
             exn[i] = max(abs(exn[i]),1e-6)
         X = np.diag(1 / np.sqrt(exn[order:]))
         iter_gamma = gamma  # Continue iteration with supplied gamma
+
+    return (coef, gain)
+
+# AR analysis assuming the excitation is distributed Student-t.
+def ARStudent(a, order=10, df=1.0):
+    if a.ndim > 1:
+        ret = np.ndarray((a.shape[0], order))
+        gain = np.ndarray(a.shape[0])
+        for f in range(a.shape[0]):
+            ret[f], gain[f] = ARStudent(a[f], order)
+        return ret, gain
+
+    # Initialise with the ML solution
+    ac = ssp.Autocorrelation(a)
+    coef, gain = ARLevinson(ac, order)
+    x = 1.0 / (ARExcitation(a, coef, gain)[order:]**2 + df)
+
+    # Follow the matrix based method to the letter.  elop contains the
+    # poles reversed, coef is the poles in order.
+    for iter in range(5):
+        X = np.diag(np.sqrt(x)) # Actually root of inverse of X
+        Y = np.dot(X, ssp.Frame(a[:a.size-1], size=order, period=1, pad=False))
+        y = np.dot(X, a[order:])
+        YY = np.dot(Y.T,Y)
+        Yy = np.dot(Y.T,y)
+        elop = np.dot(linalg.inv(YY), Yy)
+        coef = elop[::-1]
+        xx = ARExcitation(a, coef, 1.0)[order:]**2
+        gain = (df+1) * np.dot(xx,x) / y.size
+        x = 1.0 / (xx / gain + df)
 
     return (coef, gain)
 
@@ -349,7 +383,7 @@ def ARLogLikelihoodRatio(a, order=10):
             ret[f] = ARLogLikelihoodRatio(a[f], order)
         return ret
 
-    # Usual Gaussian 
+    # Usual Gaussian
     ac = Autocorrelation(a)
     coef, gain = ARLevinson(ac, order)
     exn = ARExcitation(a, coef, gain)
@@ -374,7 +408,7 @@ def ARLogLikelihoodRatio(a, order=10):
 
     exn = ARExcitation(a, coef, gain)
     llLaplace = -gamma * np.sum(np.abs(exn))
-    
+
     return llLaplace - np.logaddexp(llLaplace, llGauss)
 
 # import numpy.polynomial as pn

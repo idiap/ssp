@@ -98,7 +98,9 @@ def encode(a, pcm):
     elif lp == 'lasso':
         ar, g = ARLasso(ac, lpOrder[r], 5)
     elif lp == 'sparse':
-        ar, g = ARSparse(f, lpOrder[r], ssp.parameter('Gamma', 1.414))
+        ar, g = ARSparse(w, lpOrder[r], ssp.parameter('Gamma', 1.414))
+    elif lp == 'student':
+        ar, g = ARStudent(w, lpOrder[r], ssp.parameter('DoF', 1.0))
 
     if False:
         fig = Figure(5, 1)
