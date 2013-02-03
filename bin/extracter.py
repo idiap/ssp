@@ -7,7 +7,7 @@
 # Author(s):
 #   Phil Garner, August 2011
 #
-from ssp import *
+import ssp
 import numpy as np
 
 # Options
@@ -31,41 +31,58 @@ for pair in pairs:
     loadFile, saveFile = pair.strip().split()
 
     print "wav: ", loadFile
-    r, a = WavSource(loadFile)
+    pcm = ssp.PulseCodeModulation()
+    a = pcm.WavSource(loadFile)
 
     # Defaults for 8 kHz
     frameSize = 256
     framePeriod = 80
     lpOrder = 10
 
-    if r == 16000:
+    if pcm.rate == 16000:
         frameSize = 400
         framePeriod = 160
         lpOrder = 12
-        
-    a = ZeroFilter(a)
-    f = Frame(a, size=frameSize, period=framePeriod)
-    f = Window(f, nuttall(frameSize))
-    if 1:
-        a = Autocorrelation(f)
-    else:
-        a = Periodogram(f)
-        n = Noise(a)
-        a = SNRSpectrum(a, n * 0.1)
-        a = Autocorrelation(a, input='psd')
-    a = AutocorrelationAllPassWarp(a, alpha=mel[r], size=lpOrder+1)
 
-#    ridge = Parameter('Ridge', 0.1)
-#    a, g = ARRidge(a, lpOrder, ridge)
-#    a, g = ARLasso(a, lpOrder, ridge)
-#    a, g = ARSparse(a, lpOrder)
-    a, g = ARLevinson(a, lpOrder)
+    # Basic preprocessing
+    g = np.ndarray((0))
+    a = ssp.ZeroFilter(a)
+    f = ssp.Frame(a, size=frameSize, period=framePeriod, pad=False)
+    f = ssp.Window(f, ssp.nuttall(frameSize))
+
+    # Next part depends on user
+    frontend = ssp.parameter("FrontEnd", "ar")
+    if frontend == "ar":
+        a = ssp.Autocorrelation(f)
+        a = ssp.AutocorrelationAllPassWarp(a, alpha=ssp.mel[pcm.rate],
+                                           size=lpOrder+1)
+        a, g = ssp.ARLevinson(a, lpOrder)
+        #    ridge = Parameter('Ridge', 0.1)
+        #    a, g = ARRidge(a, lpOrder, ridge)
+        #    a, g = ARLasso(a, lpOrder, ridge)
+    elif frontend == "snr":
+        a = ssp.Periodogram(f)
+        n = ssp.Noise(a)
+        a = ssp.SNRSpectrum(a, n * 0.1)
+        a = ssp.Autocorrelation(a, input='psd')
+        a, g = ssp.ARLevinson(a, lpOrder)
+        a = ssp.AutocorrelationAllPassWarp(a, alpha=ssp.mel[pcm.rate],
+                                           size=lpOrder+1)
+    elif frontend == "sparse":
+        a, g = ssp.ARSparse(f, lpOrder, ssp.parameter("Gamma", 1.414))
+    elif frontend == "student":
+        a, g = ssp.ARStudent(f, lpOrder, ssp.parameter("DoF", 1.0))
+    else:
+        print "Unknown front end", frontend
+
 #    a, g = ARAllPassWarp(a, g, alpha=mel[r])
-    a = ARCepstrum(a, g, Parameter("nCepstra", 12))
-    m = Mean(a)
-    a = Subtract(a, m)
-    m = StdDev(a)
-    a = Divide(a, m)
+
+    # Finally, turn the AR coefs into cepstrum
+    a = ssp.ARCepstrum(a, g, ssp.parameter("nCepstra", 12))
+    m = ssp.Mean(a)
+    a = ssp.Subtract(a, m)
+    m = ssp.StdDev(a)
+    a = ssp.Divide(a, m)
 
     print "htk: ", saveFile
-    HTKSink(saveFile, a, 0.01, "USER")
+    ssp.HTKSink(saveFile, a, 0.01, "USER")

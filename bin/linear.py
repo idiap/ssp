@@ -34,71 +34,65 @@ def lap(func):
   ti = now
   print func, elapsed
 
-from ssp import *
+import ssp
 import numpy as np
 import matplotlib.pyplot as plt
 lap("Import")
 
-# Load and process
-print "Using file:", file
-r, a = WavSource(file)
-print "rate:", r, "size:", a.size
-#a = ZeroFilter(a)
-f = Frame(a, size=256, period=128)
-f = Window(f, np.hanning(256))
+# Load and do basic AR to reconstruct the spectrum
+pcm = ssp.PulseCodeModulation()
+a = pcm.WavSource(file)
+print "File:", file, "rate:", pcm.rate, "size:", a.size
+if ssp.parameter("ZF", 0) == 1:
+    a = ssp.ZeroFilter(a)
+f = ssp.Frame(a, size=256, period=128)
+f = ssp.Window(f, np.hanning(256))
 print "frame:", f.shape[0], "x", f.shape[1]
 lap("Frame")
-
-e = Energy(f)
-p = Periodogram(f)
+e = ssp.Energy(f)
+p = ssp.Periodogram(f)
 lap("Periodogram")
-
-order = 10
-if 1:
-    a = Autocorrelation(f)
-    a, g = ARLevinson(a, order)
-    lap("Levinson")
-else:
-    a, g = ARMatrix(f, order, method=Parameter('Method', 'matrix'))
-    lap("Matrix")
-
-ls = ARSpectrum(a, g, nSpec=128)
+order = pcm.speech_ar_order()
+a = ssp.Autocorrelation(f)
+a, g = ssp.ARLevinson(a, order)
+lap("Levinson")
+ls = ssp.ARSpectrum(a, g, nSpec=128)
 lap("Spectrum")
 
-t = Parameter('LP', 'arwarp')
+# Now do some esoteric AR
+t = ssp.parameter('AR', 'matrix')
+if t == 'matrix':
+    wa, wg = ssp.ARMatrix(f, order, method=ssp.parameter('Method', 'matrix'))
 if t == 'arwarp':
-    wa, wg = ARAllPassWarp(a, g, alpha=mel[r])
-    lap("AR Warp")
+    wa, wg = ssp.ARAllPassWarp(a, g, alpha=ssp.mel[pcm.rate])
 elif t == 'acwarp':
-    ac = Autocorrelation(f)
-    ac = AutocorrelationAllPassWarp(ac, alpha=mel[r], size=order+1)
-    wa, wg = ARLevinson(ac, order)
-#    wa, wg = ARRidge(ac, order, ridge=0.1)
-#    wa, wg = ARLasso(ac, order, ridge=10)
-    lap("AC Warp")
+    ac = ssp.Autocorrelation(f)
+    ac = ssp.AutocorrelationAllPassWarp(ac, alpha=ssp.mel[pcm.rate],
+                                        size=order+1)
+    wa, wg = ssp.ARLevinson(ac, order)
 elif t == 'ridge':
-    ac = Autocorrelation(f)
-    wa, wg = ARRidge(ac, order, ridge=0.01)
-    lap("Ridge")
+    ac = ssp.Autocorrelation(f)
+    wa, wg = ssp.ARRidge(ac, order, ridge=0.01)
 elif t == 'lasso':
-    ac = Autocorrelation(f)
-    wa, wg = ARLasso(ac, order, ridge=30)
-    lap("Lasso")
+    ac = ssp.Autocorrelation(f)
+    wa, wg = ssp.ARLasso(ac, order, ridge=30)
 elif t == 'sparse':
-    wa, wg = ARSparse(f, order)
-    lap("Sparse")
-ws = ARSpectrum(wa, wg, nSpec=128)
+    wa, wg = ssp.ARSparse(f, order, ssp.parameter("Gamma", 1))
+elif t == 'student':
+    wa, wg = ssp.ARStudent(f, order, ssp.parameter("DF", 1))
+lap(t)
+ws = ssp.ARSpectrum(wa, wg, nSpec=128)
 lap("Spectrum")
 
 #llRatio = ARLogLikelihoodRatio(f, order)
 
-exn = ARExcitation(f, a, g)
-exnw = ARExcitation(f, wa, wg)
+exn = ssp.ARExcitation(f, a, g)
+exnw = ssp.ARExcitation(f, wa, wg)
 
 
 # Draw it
 # fig.add_subplot(2,1,1) # two rows, one column, first plot
-frame = Parameter('Frame', 0)
+frame = ssp.parameter('Frame', 0)
 fig = plt.figure()
 plt.bone()
 pdfSpec = fig.add_subplot(3,2,1)
@@ -112,6 +106,7 @@ pdfSpec.imshow(np.transpose(np.log10(p)), origin='lower', aspect='auto')
 pdfPlot.plot(np.log10(e/f.shape[1]))
 pdfPlot.plot(np.log10(g))
 pdfPlot.plot(np.log10(wg))
+pdfPlot.set_xlim(0, len(g))
 
 #pdfPlot.plot(llRatio)
 
@@ -119,14 +114,16 @@ larSpec.imshow(np.transpose(np.log10(ls)), origin='lower', aspect='auto')
 #larPlot.plot(Norm(a, 1))
 #larPlot.plot(Norm(wa, 1))
 larPlot.plot(exn[frame])
-larPlot.plot(exn[frame])
+larPlot.plot(f[frame] / np.sqrt(g[frame]))
 larPlot.plot(exnw[frame])
+larPlot.set_xlim(0, f.shape[1])
 
 
 warSpec.imshow(np.transpose(np.log10(ws)), origin='lower', aspect='auto')
 warPlot.plot(np.log10(p[frame]/f.shape[1]))
 warPlot.plot(np.log10(ls[frame]), label="Linear")
 warPlot.plot(np.log10(ws[frame]), label="Warped")
+warPlot.set_xlim(0, ls.shape[1])
 #warPlot.legend()
 
 plt.show()
