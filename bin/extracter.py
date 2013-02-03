@@ -71,7 +71,9 @@ for pair in pairs:
     elif frontend == "sparse":
         a, g = ssp.ARSparse(f, lpOrder, ssp.parameter("Gamma", 1.414))
     elif frontend == "student":
-        a, g = ssp.ARStudent(f, lpOrder, ssp.parameter("DoF", 1.0))
+        m = ssp.AllPassWarpMatrix(frameSize, ssp.mel[pcm.rate])
+        fw = np.dot(f,m.T)
+        a, g = ssp.ARStudent(fw, lpOrder, ssp.parameter("DoF", 1.0))
     else:
         print "Unknown front end", frontend
 

@@ -351,7 +351,8 @@ def ARAllPassWarp(a, g, alpha=0, matrix=None):
         return reta, retg
 
     # In the AR case, we need to prepend a 1
-    wa = np.dot(m, np.insert(-a, 0, 1))
+    aa = np.insert(-a, 0, 1.0)
+    wa = np.dot(m, aa)
     wg = g / wa[0]
     wa /= wa[0]
     return -wa[1:], wg

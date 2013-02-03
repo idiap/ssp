@@ -41,11 +41,11 @@ lap("Import")
 
 # Load and do basic AR to reconstruct the spectrum
 pcm = ssp.PulseCodeModulation()
-a = pcm.WavSource(file)
-print "File:", file, "rate:", pcm.rate, "size:", a.size
+wav = pcm.WavSource(file)
+print "File:", file, "rate:", pcm.rate, "size:", wav.size
 if ssp.parameter("ZF", 0) == 1:
-    a = ssp.ZeroFilter(a)
-f = ssp.Frame(a, size=256, period=128)
+    wav = ssp.ZeroFilter(wav)
+f = ssp.Frame(wav, size=256, period=128)
 f = ssp.Window(f, np.hanning(256))
 print "frame:", f.shape[0], "x", f.shape[1]
 lap("Frame")
@@ -70,6 +70,11 @@ elif t == 'acwarp':
     ac = ssp.AutocorrelationAllPassWarp(ac, alpha=ssp.mel[pcm.rate],
                                         size=order+1)
     wa, wg = ssp.ARLevinson(ac, order)
+elif t == 'tdwarp':
+    m = ssp.AllPassWarpMatrix(256, ssp.mel[pcm.rate])
+    fw = np.dot(f,m.T)
+    aw = ssp.Autocorrelation(fw)
+    wa, wg = ssp.ARLevinson(aw, order)
 elif t == 'ridge':
     ac = ssp.Autocorrelation(f)
     wa, wg = ssp.ARRidge(ac, order, ridge=0.01)
