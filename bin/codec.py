@@ -9,7 +9,8 @@
 #   Phil Garner, May 2012
 #
 import ssp
-from ssp import *
+import numpy as np
+import numpy.linalg as linalg
 from optparse import OptionParser
 from os.path import splitext
 
@@ -31,6 +32,8 @@ op.add_option("-o", dest="ola", action="store_false", default=True,
               help="Concatenate frames (i.e., don't use OLA)")
 op.add_option("-x", dest="excitation", action="store_true", default=False,
               help="Output excitation waveform instead of encoding")
+op.add_option("-n", dest="normalise", action="store_true", default=False,
+              help="Normalise output to same power as input")
 (opt, arg) = op.parse_args()
 
 # For excitation we need to disable OLA
@@ -73,37 +76,37 @@ def encode(a, pcm):
 
     # First the pitch as it's on the unaltered waveform.  The frame
     # should be long with no window.  1024 at 16 kHz is 64 ms.
-    pf = Frame(a, size=pitchSize, period=framePeriod)
-    pitch, hnr = ACPitch(pf, pcm)
+    pf = ssp.Frame(a, size=pitchSize, period=framePeriod)
+    pitch, hnr = ssp.ACPitch(pf, pcm)
 
     # Pre-emphasis
     pre = ssp.parameter("Pre", None)
     if pre is not None:
-        a = PoleFilter(a, pre) / 5
+        a = ssp.PoleFilter(a, pre) / 5
 
     # Keep f around after the function so the decoder can do a
     # reference decoding on the real excitaton.
     global f
-    f = Frame(a, size=frameSize, period=framePeriod)
+    f = ssp.Frame(a, size=frameSize, period=framePeriod)
     #aw = np.hanning(frameSize+1)
     aw = ssp.nuttall(frameSize+1)
     aw = np.delete(aw, -1)
-    w = Window(f, aw)
-    ac = Autocorrelation(w)
+    w = ssp.Window(f, aw)
+    ac = ssp.Autocorrelation(w)
     lp = ssp.parameter('AR', 'levinson')
     if lp == 'levinson':
-        ar, g = ARLevinson(ac, lpOrder[r])
+        ar, g = ssp.ARLevinson(ac, lpOrder[r])
     elif lp == 'ridge':
-        ar, g = ARRidge(ac, lpOrder[r], 0.03)
+        ar, g = ssp.ARRidge(ac, lpOrder[r], 0.03)
     elif lp == 'lasso':
-        ar, g = ARLasso(ac, lpOrder[r], 5)
+        ar, g = ssp.ARLasso(ac, lpOrder[r], 5)
     elif lp == 'sparse':
-        ar, g = ARSparse(w, lpOrder[r], ssp.parameter('Gamma', 1.414))
+        ar, g = ssp.ARSparse(w, lpOrder[r], ssp.parameter('Gamma', 1.414))
     elif lp == 'student':
-        ar, g = ARStudent(w, lpOrder[r], ssp.parameter('DoF', 1.0))
+        ar, g = ssp.ARStudent(w, lpOrder[r], ssp.parameter('DoF', 50.0))
 
     if False:
-        fig = Figure(5, 1)
+        fig = ssp.Figure(5, 1)
         #stddev = np.sqrt(kVar)
         sPlot = fig.subplot()
         sPlot.plot(pitch, 'c')
@@ -139,7 +142,7 @@ def decode((ar, g, pitch, hnr)):
     # Use the original AR residual; it should be a very good
     # reconstruction.
     if ex == 'ar':
-        e = ARExcitation(f, ar, g)
+        e = ssp.ARExcitation(f, ar, g)
 
     # Just noise.  This is effectively a whisper synthesis.
     elif ex == 'noise':
@@ -152,15 +155,15 @@ def decode((ar, g, pitch, hnr)):
         period = int(1.0 / 200 * r)
         for i in range(0, len(ew), period):
             ew[i] = period
-        e = Frame(ew, size=frameSize, period=framePeriod)        
+        e = ssp.Frame(ew, size=frameSize, period=framePeriod)
 
     # Synthesise harmonics plus noise in the ratio suggested by the
     # HNR.
     elif ex == 'synth':
         # Harmonic part
         mperiod = int(1.0 / np.mean(pitch) * r)
-        gm = GlottalModel(ssp.parameter('Pulse', 'impulse'))
-        pr, pg = pulse_response(gm, pcm, period=mperiod, order=lpOrder[r])
+        gm = ssp.GlottalModel(ssp.parameter('Pulse', 'impulse'))
+        pr, pg = ssp.pulse_response(gm, pcm, period=mperiod, order=lpOrder[r])
         h = np.zeros(nSamples)
         i = 0
         frame = 0
@@ -172,13 +175,13 @@ def decode((ar, g, pitch, hnr)):
             h[i:i+period] = gm.pulse(period, pcm) * weight
             i += period
             frame = i // framePeriod
-        h = ARExcitation(h, pr, 1.0)
-        fh = Frame(h, size=frameSize, period=framePeriod)
+        h = ssp.ARExcitation(h, pr, 1.0)
+        fh = ssp.Frame(h, size=frameSize, period=framePeriod)
 
         # Noise part
         n = np.random.normal(size=nSamples)
-        n = ZeroFilter(n, 1.0) # Include the radiation impedance
-        fn = Frame(n, size=frameSize, period=framePeriod)
+        n = ssp.ZeroFilter(n, 1.0) # Include the radiation impedance
+        fn = ssp.Frame(n, size=frameSize, period=framePeriod)
         for i in range(len(fn)):
             fn[i] *= np.sqrt(1.0 / (hnr[i] + 1))
 
@@ -189,7 +192,7 @@ def decode((ar, g, pitch, hnr)):
     # of time domain impulses.
     elif ex == 'sine':
         order = 20
-        sine = Harmonics(r, order)
+        sine = ssp.Harmonics(r, order)
         h = np.zeros(nSamples)
         for i in range(0, len(h)-framePeriod, framePeriod):
             frame = i // framePeriod
@@ -197,9 +200,9 @@ def decode((ar, g, pitch, hnr)):
             weight = np.sqrt(hnr[frame] / (hnr[frame] + 1))
             h[i:i+framePeriod] = ( sine.sample(pitch[frame], framePeriod)
                                       * weight )
-        fh = Frame(h, size=frameSize, period=framePeriod)
+        fh = ssp.Frame(h, size=frameSize, period=framePeriod)
         n = np.random.normal(size=nSamples)
-        fn = Frame(n, size=frameSize, period=framePeriod)
+        fn = ssp.Frame(n, size=frameSize, period=framePeriod)
         for i in range(len(fn)):
             fn[i] *= np.sqrt(1.0 / (hnr[i] + 1))
         e = fn + fh*10
@@ -210,13 +213,13 @@ def decode((ar, g, pitch, hnr)):
     elif ex == 'holp':
         # Some noise
         n = np.random.normal(size=nSamples)
-        fn = Frame(n, size=frameSize, period=framePeriod)
+        fn = ssp.Frame(n, size=frameSize, period=framePeriod)
 
         # Use the noise to excite a high order AR model
         fh = np.ndarray(fn.shape)
         for i in range(len(fn)):
-            hoar = ARHarmonicPoly(pitch[i], r, 0.7)
-            fh[i] = ARResynthesis(fn[i], hoar, 1.0 / linalg.norm(hoar)**2)
+            hoar = ssp.ARHarmonicPoly(pitch[i], r, 0.7)
+            fh[i] = ssp.ARResynthesis(fn[i], hoar, 1.0 / linalg.norm(hoar)**2)
             print i, pitch[i], linalg.norm(hoar), np.min(fh[i]), np.max(fh[i])
             print ' ', np.min(hoar), np.max(hoar)
             # fh[i] *= np.sqrt(r / pitch[i]) / linalg.norm(fh[i])
@@ -226,13 +229,13 @@ def decode((ar, g, pitch, hnr)):
         for i in range(len(fn)):
             fn[i] *= np.sqrt(1.0 / (hnr[i] + 1))
         e = fh # fn + fh*30
-        
+
     # Shaped excitation.  The pulses are shaped by a filter to have a
     # rolloff, then added to the noise.  The resulting signal is
     # flattened using AR.
     elif ex == 'shaped':
         # Harmonic part
-        gm = GlottalModel(ssp.parameter('Pulse', 'impulse'))
+        gm = ssp.GlottalModel(ssp.parameter('Pulse', 'impulse'))
         gm.angle = pcm.hertz_to_radians(np.mean(pitch)*0.5)
         h = np.zeros(nSamples)
         i = 0
@@ -247,38 +250,42 @@ def decode((ar, g, pitch, hnr)):
             frame = i // framePeriod
 
         # Filter to mimic the glottal pulse
-        #pole = ssp.parameter("Pole", None)
-        pole = None
-        if pole is not None:
-            #h = PoleFilter(h, pole)
-            #h = PoleFilter(h, pole)
-            h = ZeroFilter(h, -1.0)
-            h = ZeroFilter(h, -0.5)
-            h = ZeroFilter(h, 1.0)
-            h = PolePairFilter(h, pole, pcm.hertz_to_radians(np.mean(pitch)))
-        fh = Frame(h, size=frameSize, period=framePeriod)
+        hfilt = ssp.parameter("HFilt", None)
+        hpole1 = ssp.parameter("HPole1", 0.98)
+        hpole2 = ssp.parameter("HPole2", 0.8)
+        angle = pcm.hertz_to_radians(np.mean(pitch)) * ssp.parameter("Angle", 1.0)
+        if hfilt == 'pp':
+            h = ssp.ZeroFilter(h, 1.0)
+            h = ssp.PolePairFilter(h, hpole1, angle)
+        if hfilt == 'g':
+            h = ssp.GFilter(h, hpole1, angle, hpole2)
+        if hfilt == 'p':
+            h = ssp.PFilter(h, hpole1, angle, hpole2)
+        fh = ssp.Frame(h, size=frameSize, period=framePeriod)
 
         # Noise part
         n = np.random.normal(size=nSamples)
         zero = ssp.parameter("NoiseZero", 1.0)
-        n = ZeroFilter(n, zero) # Include the radiation impedance
-        n = PolePairFilter(n, 0.99, pcm.hertz_to_radians(2000))
-        #n = PoleFilter(n, -0.99)
-        fn = Frame(n, size=frameSize, period=framePeriod)
+        n = ssp.ZeroFilter(n, zero) # Include the radiation impedance
+        npole = ssp.parameter("NPole", None)
+        nf = ssp.parameter("NoiseFreq", 4000)
+        if npole is not None:
+            n = ssp.PolePairFilter(n, npole, pcm.hertz_to_radians(nf))
+        fn = ssp.Frame(n, size=frameSize, period=framePeriod)
         for i in range(len(fn)):
             fn[i] *= np.sqrt(1.0 / (hnr[i] + 1))
 
         # Combination
-        assert(len(fh) == len(fn))        
+        assert(len(fh) == len(fn))
         hgain = ssp.parameter("HGain", 1.0)
         e = fn + fh * hgain
         hnw = np.hanning(frameSize)
         for i in range(len(e)):
-            ep = Window(e[i], hnw)
+            ep = ssp.Window(e[i], hnw)
             #ep = e[i]
-            eac = Autocorrelation(ep)
-            ea, eg = ARLevinson(eac, order=lpOrder[r])
-            e[i] = ARExcitation(e[i], ea, eg)
+            eac = ssp.Autocorrelation(ep)
+            ea, eg = ssp.ARLevinson(eac, order=lpOrder[r])
+            e[i] = ssp.ARExcitation(e[i], ea, eg)
 
     else:
         print "Unknown synthesis method"
@@ -287,23 +294,24 @@ def decode((ar, g, pitch, hnr)):
     if opt.excitation:
         s = e.flatten('C')/frameSize
     else:
-        s = ARResynthesis(e, ar, g)
+        s = ssp.ARResynthesis(e, ar, g)
         if opt.ola:
             # Asymmetric window for OLA
             sw = np.hanning(frameSize+1)
             sw = np.delete(sw, -1)
-            s = Window(s, sw)
-            s = OverlapAdd(s)
+            s = ssp.Window(s, sw)
+            s = ssp.OverlapAdd(s)
         else:
             s = s.flatten('C')
-            
-    return s
+
+    gain = ssp.parameter("Gain", 1.0)
+    return s * gain
 
 #
 # Main loop over the file list
 #
 r = int(opt.rate)
-pcm = PulseCodeModulation(r)
+pcm = ssp.PulseCodeModulation(r)
 if opt.framePeriod:
     framePeriod = opt.framePeriod
 else:
@@ -311,11 +319,15 @@ else:
 
 for pair in pairs:
     loadFile, saveFile = pair.strip().split()
+    aNorm = None
+    dNorm = None
 
     # Neither flag - assume a best effort copy
     if not (opt.encode or opt.decode or opt.pitch):
         a = pcm.WavSource(loadFile)
         d = decode(encode(a, pcm))
+        if opt.normalise:
+            d *= linalg.norm(a)/linalg.norm(d)
         pcm.WavSink(d, saveFile)
 
     # Encode to a file
@@ -324,9 +336,9 @@ for pair in pairs:
         (ar, g, pitch, hnr) = encode(a, pcm)
 
         # The cepstrum part is just like HTK
-        c = ARCepstrum(ar, g, lpOrder[r])
+        c = ssp.ARCepstrum(ar, g, lpOrder[r])
         period = float(framePeriod)/r
-        HTKSink(saveFile, c, period)
+        ssp.HTKSink(saveFile, c, period)
 
         # F0 and HNR are both text formats
         (path, ext) = splitext(saveFile)
