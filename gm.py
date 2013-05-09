@@ -128,19 +128,18 @@ class GlottalModel:
                 t = 1.0-float(i/T)
                 pulse[i] = -np.exp(-t*5)
         elif self.ptype == 'polefilter':
-            pulse[0] = 1.0
+            pulse[T/2] = 1.0
             pulse = PoleFilter(pulse, self.pole)
         elif self.ptype == 'zerofilter':
-            pulse[0] = 1.0
+            pulse[T/2] = 1.0
             pulse = ZeroFilter(pulse, self.zero)
         elif self.ptype == 'polezerofilter':
-            pulse[1] = 1.0
+            pulse[T/2] = 1.0
             pulse = PoleFilter(pulse, self.pole)
             pulse = PoleFilter(pulse, self.pole)
             pulse = ZeroFilter(pulse, self.zero)
         elif self.ptype == 'polepairzerofilter':
-            pulse[1] = 1.0
-            #pulse = PoleFilter(pulse, params[0])
+            pulse[T/2] = 1.0
             pulse = PolePairFilter(pulse, self.pole, self.angle)
             pulse = ZeroFilter(pulse, self.zero)
         elif self.ptype == 'multipulse':
@@ -186,5 +185,47 @@ class GlottalModel:
             f = 1.0 - np.exp(-epsilon * tce) - ta * epsilon
             fd = tce * np.exp(-epsilon * tce) - ta
             epsilon -= f/fd
-        
+
         return epsilon
+
+def GFilter(a, mag, angle, pole):
+    """
+    Takes a magnitude and phase taken to be the location of a pole
+    pair; filters the signal using the implied conjugate pair.
+    """
+    filter = np.zeros(a.size)
+
+    # Memory
+    m = [0.0, 0.0]
+
+    # Pole pair
+    r1 = 2.0 * mag * np.cos(angle)
+    r2 = -mag**2
+
+    peak = 0.0
+    opening = True
+    for i in range(a.size):
+        if not opening:
+            if a[i] > 0:
+                opening = True
+            else:
+                filter[i] = a[i] + pole * m[0]
+        if opening:
+            filter[i] = a[i] + r1 * m[0] +  r2 * m[1]
+            if filter[i] < -peak:
+                opening = False
+        m[1] = m[0]
+        m[0] = filter[i]
+        if peak < filter[i]:
+            peak = filter[i]
+
+    filter *= np.sqrt(len(filter)) / linalg.norm(filter)
+    return filter
+
+def PFilter(a, mag, angle, pole):
+    filter = a[::-1]
+    filter = ssp.PolePairFilter(filter, mag, angle)
+    filter = filter[::-1]
+    filter = ssp.ZeroFilter(filter, 1.0)
+    filter = ssp.PoleFilter(filter, pole)
+    return filter
