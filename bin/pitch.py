@@ -89,8 +89,9 @@ p = Periodogram(wf)
 fig = Figure(5,1)
 #pSpec = fig.subplot()
 #specplot(pSpec, p, r)
-sSpec = fig.subplot()
-specplot(sSpec, p[:,:pcm.hertz_to_dftbin(hiPitch, fs)], hiPitch*2)
+if True:
+    sSpec = fig.subplot()
+    specplot(sSpec, p[:,:pcm.hertz_to_dftbin(hiPitch, fs)], hiPitch*2)
 
 method = parameter('Method', 'ac')
 
@@ -113,15 +114,15 @@ if method == 'ac':
     nac = Divide(ac, wac)
     #h = Harmonogram(nac, 'psd', True)
 
-    if False:
+    if True:
         fPlot = fig.subplot()
-        #fPlot.set_xlim(0, fs)
-        frame = Parameter("Frame", 0)
+        frame = ssp.parameter("Frame", 0)
         #fPlot.plot(f[frame], 'r')
         #fPlot.plot(wf[frame], 'g')
         fPlot.plot(ac[frame], 'b')
         fPlot.plot(nac[frame], 'c')
         #fPlot.plot(h[frame], 'r')
+        fPlot.set_xlim(0, fs/2)
 
     # Pitch bin is the maximum in each frame
     #m = np.argmax(nac[:,loACBin:hiACBin], axis=1) + loACBin
@@ -143,27 +144,28 @@ if method == 'ac':
         var[i] = (1.0 / hnr[i] * prange)**2
 
     stddev = np.sqrt(var)
-    hPlot = fig.subplot()
-    hPlot.plot(pitch, 'c')
-    hPlot.plot(pitch + stddev, 'b')
-    hPlot.plot(pitch - stddev, 'b')
-    hPlot.set_xlim(0, len(pitch))
-    hPlot.set_ylim(0, hiPitch)
-
-
-    pPlot = fig.subplot()
-    pPlot.plot(pitch, 'r')
+    if True:
+        hPlot = fig.subplot()
+        hPlot.plot(pitch, 'c')
+        hPlot.plot(pitch + stddev, 'b')
+        hPlot.plot(pitch - stddev, 'b')
+        hPlot.set_xlim(0, len(pitch))
+        hPlot.set_ylim(0, hiPitch)
 
     # Kalman smoother
     kPitch, kVar = kalman(
         pitch, var, 1e3, loPitch + prange/2, prange**2
         )
     stddev = np.sqrt(kVar)
-    pPlot.plot(kPitch, 'c')
-    pPlot.plot(kPitch + stddev, 'b')
-    pPlot.plot(kPitch - stddev, 'b')
-    pPlot.set_xlim(0, len(pitch))
-    pPlot.set_ylim(0, hiPitch)
+
+    if True:
+        pPlot = fig.subplot()
+        pPlot.plot(pitch, 'r')
+        pPlot.plot(kPitch, 'c')
+        pPlot.plot(kPitch + stddev, 'b')
+        pPlot.plot(kPitch - stddev, 'b')
+        pPlot.set_xlim(0, len(pitch))
+        pPlot.set_ylim(0, hiPitch)
 
     # Now run it again, but with tighter limits
     mpitch = np.mean(kPitch)
@@ -183,20 +185,21 @@ if method == 'ac':
             hnr[i] = fnac / (1.0 - fnac)
         var[i] = (1.0 / hnr[i])**2 * rng**2
     
-    sPlot = fig.subplot()
-    sPlot.plot(pitch, 'r')
-    sPlot.plot(tempo, 'm')
-
     # Kalman smoother again
     kPitch, kVar = kalman(
         pitch, var, 1e4, mpitch, prange**2
         )
     stddev = np.sqrt(kVar)
-    sPlot.plot(kPitch, 'c')
-    sPlot.plot(kPitch + stddev, 'b')
-    sPlot.plot(kPitch - stddev, 'b')
-    sPlot.set_xlim(0, len(pitch))
-    sPlot.set_ylim(0, hiPitch)
+
+    if True:
+        sPlot = fig.subplot()
+        sPlot.plot(pitch, 'r')
+        sPlot.plot(tempo, 'm')
+        sPlot.plot(kPitch, 'c')
+        sPlot.plot(kPitch + stddev, 'b')
+        sPlot.plot(kPitch - stddev, 'b')
+        sPlot.set_xlim(0, len(pitch))
+        sPlot.set_ylim(0, hiPitch)
 
 elif method == 'ar':
     # Low order AR
