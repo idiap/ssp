@@ -9,23 +9,19 @@
 #
 import numpy as np
 import matplotlib.pyplot as plt
-
-from ssp import *
-
-#x = BilinearWarpMatrix(3, alpha=-0.3, size=8)
-#print x
+import ssp
 
 i = np.identity(30)
-o1 = BilinearWarpOppenheim(i, alpha=0, size=40)
-o2 = BilinearWarpOppenheim(i, alpha=0.1, size=40)
-o3 = BilinearWarpOppenheim(i, alpha=0.3, size=40)
-#o5 = BilinearWarpOppenheim(i, alpha=-0.1, size=40)
-#o6 = BilinearWarpOppenheim(i, alpha=-0.3, size=40)
-o5 = BilinearWarpMatrix(30, alpha=-0.1, size=40)
-o6 = BilinearWarpMatrix(30, alpha=-0.3, size=40)
+o1 = ssp.AllPassWarpOppenheim(i, alpha=0, size=40)
+o2 = ssp.AllPassWarpOppenheim(i, alpha=0.1, size=40)
+o3 = ssp.AllPassWarpOppenheim(i, alpha=0.3, size=40)
+#o5 = ssp.AllPassWarpOppenheim(i, alpha=-0.1, size=40)
+#o6 = ssp.AllPassWarpOppenheim(i, alpha=-0.3, size=40)
+o5 = ssp.AllPassWarpMatrix(30, alpha=-0.1, size=40)
+o6 = ssp.AllPassWarpMatrix(30, alpha=-0.3, size=40)
 
 
-#m = BilinearWarpMatrix(4, alpha=0.42, size=40)
+#m = ssp.AllPassWarpMatrix(4, alpha=0.42, size=40)
 
 fig = plt.figure()
 o1Mat = fig.add_subplot(2,3,1)
@@ -41,6 +37,3 @@ o5Mat.imshow(o5)
 o6Mat.imshow(o6)
 
 plt.show()
-#print o.T
-#print "-----------------"
-#print m
