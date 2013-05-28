@@ -7,6 +7,7 @@
 #   Phil Garner, December 2012
 #
 import numpy as np
+import scipy.signal as sp
 import numpy.linalg as linalg
 import ssp
 
@@ -152,24 +153,37 @@ def ARLasso(ac, order=10, ridge=0.0):
     return coef, gain
 
 # AR power spectrum
-def ARSpectrum(a, g, nSpec=256, twiddle=None):
-    if twiddle is None:
-        # Pre-compute the "twiddle" factors; saves a lot of CPU
-        twiddle = np.ndarray((nSpec,a.shape[a.ndim-1]), dtype='complex')
-        for i in range(nSpec):
-            for j in range(twiddle.shape[1]):
-                twiddle[i,j] = np.exp(-1.j * np.pi * i * (j+1) / nSpec)
-    if a.ndim > 1:
-        ret = np.ndarray((a.shape[0], nSpec))
-        for f in range(a.shape[0]):
-            ret[f] = ARSpectrum(a[f], g[f], nSpec, twiddle)
-        return ret
+# Old version before I found scipy.signal.freqz()
+#def ARSpectrum(a, g, nSpec=256, twiddle=None):
+#    if twiddle is None:
+#        # Pre-compute the "twiddle" factors; saves a lot of CPU
+#        twiddle = np.ndarray((nSpec,a.shape[a.ndim-1]), dtype='complex')
+#        for i in range(nSpec):
+#            for j in range(twiddle.shape[1]):
+#                twiddle[i,j] = np.exp(-1.j * np.pi * i * (j+1) / nSpec)
+#    if a.ndim > 1:
+#        ret = np.ndarray((a.shape[0], nSpec))
+#        for f in range(a.shape[0]):
+#            ret[f] = ARSpectrum(a[f], g[f], nSpec, twiddle)
+#        return ret
+#
+#    spec = np.ndarray(nSpec)
+#    for i in range(nSpec):
+#        sm = np.dot(a,twiddle[i])
+#        spec[i] = g / abs(1.0 - sm)**2
+#    return spec
 
-    spec = np.ndarray(nSpec)
-    for i in range(nSpec):
-        sm = np.dot(a,twiddle[i])
-        spec[i] = g / abs(1.0 - sm)**2
-    return spec
+def ARSpectrum(ar, gg, nSpec=256):
+    """
+    Wrapper around scipy.signal.freqz() that both converts ar to
+    filter coefficients and broadcasts over an array.
+    """
+    ret = np.ndarray(ssp.newshape(ar.shape, nSpec))
+    for a, g, r in ssp.refiter([ar, gg, ret], ssp.newshape(ar.shape)):
+        numer = np.sqrt(g)
+        denom = -np.insert(a, 0, -1)
+        tmp, r[...] = np.abs(sp.freqz(numer, denom, nSpec))**2
+    return ret
 
 # AR cepstrum
 def ARCepstrum(a, g, order=None):

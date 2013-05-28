@@ -156,10 +156,14 @@ class PulseCodeModulation:
         """ Returns the angle corresponding to a value in Hertz """
         return float(hz) / float(self.rate) * np.pi * 2
 
+    def radians_to_hertz(self, rad):
+        """ Returns the angle corresponding to a value in Hertz """
+        return float(rad) * float(self.rate) / (np.pi * 2)
+
 
 #
 # The functions here use ThisFormat rather than this_format to make
-# them look more like Tracter.  They also use the lowdims() iterator
+# them look more like Tracter.  They also use the refiter() iterator
 #
 
 # Filter comprising a single zero
