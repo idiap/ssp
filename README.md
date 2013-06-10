@@ -1,15 +1,27 @@
 SSP - Speech Signal Processing module
+=====================================
 
-December 2012; converted to a module, so:
+SSP is released under the Gnu GPL version 3.  See the file COPYING for
+details.
 
- ./core.py is the core library code (was ssp.py)
- ./bin/* is all the executables (make a symlink if you like)
+To install SSP, something like this ought to work:
+ mkdir lib
+ cd lib
+ git clone git@github.com:idiap/ssp.git
+ export PYTHONPATH=~/lib
 
-The directory *above* this should be on PYTHONPATH, then
- import ssp
-will actually import
- ./__init__.py
-and that one will import core.py into namespace ssp
+Then in some working directory
+ ln -s ~/lib/ssp/bin/pitch.py
+ ln -s ~/lib/ssp/bin/codec.py
+
+Then you can say
+ pitch.py test.wav  # Graphical view of what's going on
+ codec.py -h
+ codec.py -r 22050 -p EM1.wav EM1.lf0
+
+Otherwise, see the wiki
+ https://github.com/idiap/ssp/wiki
 
 --
 Phil Garner
+June 2013
