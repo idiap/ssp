@@ -215,9 +215,9 @@ def ARCepstrumToPoly(cep, order=None):
     """
     if not order:
         order = cep.shape[-1]-1
-    ar = np.ndarray(newshape(cep.shape, order))
-    ag = np.ndarray(newshape(cep.shape, 1))
-    for c, a, g in refiter([cep, ar, ag], newshape(cep.shape)):
+    ar = np.ndarray(ssp.newshape(cep.shape, order))
+    ag = np.ndarray(ssp.newshape(cep.shape, 1))
+    for c, a, g in ssp.refiter([cep, ar, ag], ssp.newshape(cep.shape)):
         for i in range(order):
             sum = 0
             for k in range(i):
@@ -228,7 +228,7 @@ def ARCepstrumToPoly(cep, order=None):
             if (i < a.size):
                 a[i] += c[i]
         g[0] = np.exp(c[order])
-    return ar, ag.reshape(newshape(cep.shape))
+    return ar, ag.reshape(ssp.newshape(cep.shape))
 
 # AR excitation filter
 def ARExcitation(a, ar, gg):

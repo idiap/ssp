@@ -362,7 +362,7 @@ for pair in pairs:
         loadFileHNR = path + ".hnr"
         pitch = np.exp(np.loadtxt(loadFileLF0))
         hnr = np.loadtxt(loadFileHNR)
-        c, period = HTKSource(loadFile)
-        (ar, g) = ARCepstrumToPoly(c)
+        c, period = ssp.HTKSource(loadFile)
+        (ar, g) = ssp.ARCepstrumToPoly(c)
         d = decode((ar, g, pitch, hnr))
         pcm.WavSink(d, saveFile)
