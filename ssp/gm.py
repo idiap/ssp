@@ -86,6 +86,9 @@ def lf_alpha(tp, te, epsilon, T0, alpha=0.0):
     return alpha
 
 def lf_epsilon(te, ta, T0):
+    """
+    Given Ta, uses Newton-Raphson to find epsilon in an LF model.
+    """
     tce = T0 - te
     epsilon = 1.0/ta
     for iter in range(5):
@@ -95,6 +98,38 @@ def lf_epsilon(te, ta, T0):
 
     return epsilon
 
+def lf_te(T0, alpha, omega, epsilon, te=None):
+    """
+    Given an LF model in terms of alpha, omega and epsilon, calculates
+    Te using Newton-Raphson.
+    """
+    tc = T0
+    tp = np.pi / omega
+    if te is None:
+        # Initialise te to tp, plus a bit to break symmetry
+        te = tp * 1.01
+    for iter in range(5):
+        exp = np.exp(-epsilon*(tc-te))
+        sin = np.sin(omega*te)
+        tan = np.tan(omega*te)
+        esin = np.exp(alpha*te)*sin
+        f = (
+            alpha
+            - omega/tan
+            + omega/esin
+            - (alpha**2 + omega**2)*((tc-te)*exp/(1.0-exp) - 1.0/epsilon)
+            )
+        fd = (
+            (omega/sin)**2
+            - omega/esin*(alpha+omega/tan)
+            + (alpha**2+omega**2)
+            * (exp*(1-epsilon*(tc-te))-exp**2) / (1-exp)**2
+            )
+        te -= f/fd
+        if te < tp:
+            # With proper initialisation, this should not happen
+            raise ValueError('te < tp')
+    return te
 
 class GlottalModel:
     """
