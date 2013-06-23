@@ -559,38 +559,6 @@ def gaussian(n, sigma=0.5):
         w[i] = np.exp(-0.5 * ( (i-(n-1)/2.0) / (sigma*(n-1)/2.0) )**2)
     return w
 
-import matplotlib
-#matplotlib.use('Qt4Agg')
-import matplotlib.pyplot as plt
-def zplot(fig, a):
-    ax = fig.add_axes([0.1, 0.1, 0.8, 0.8], polar=True)
-    arg = np.angle(a)
-    mag = np.abs(a)
-    ax.plot(arg, mag, 'r+')
-    ax.set_rmax(1.0)
-
-def specplot(ax, a, r):
-    ax.imshow(np.transpose(np.log10(a)),
-              origin='lower', aspect='auto', cmap='bone')
-    ax.set_yticks((0,a.shape[-1]-1))
-    ax.set_yticklabels(('0', r/2))
-
-class Figure:
-    def __init__(self, rows=1, cols=1):
-        self.rows = rows
-        self.cols = cols
-        self.next = 1
-        self.fig = plt.figure()
-
-    # Plot order: blue, green, red, ...
-    def subplot(self):
-        if self.next > self.rows * self.cols:
-            raise OverflowError('Out of plots')
-        axesSubplot = self.fig.add_subplot(self.rows, self.cols, self.next)
-        self.next += 1
-        return axesSubplot
-
-
 def kalman(obs, obsVar, seqVar, initMean, initVar):
     stateMean = np.ndarray(len(obs))
     stateVar  = np.ndarray(len(obs))

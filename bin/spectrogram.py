@@ -17,29 +17,34 @@ file = arg[0]
 
 import ssp
 import numpy as np
-import matplotlib.pyplot as plt
 
 # Load and process
 pcm = ssp.PulseCodeModulation()
 a = pcm.WavSource(file)
-a = ssp.ZeroFilter(a)
-f = ssp.Frame(a, size=256, period=80)
-type = ssp.parameter('Type', 'ar')
+if (ssp.parameter('Pre', None)):
+    a = ssp.ZeroFilter(a)
+framePeriod = pcm.seconds_to_period(0.01)
+frameSize = pcm.seconds_to_period(0.02, 'atleast')
+f = ssp.Frame(a, size=frameSize, period=framePeriod)
+w = ssp.nuttall(frameSize+1)
+w = np.delete(w, -1)
+wf = ssp.Window(f, w)
+type = ssp.parameter('Type', 'psd')
 if type == 'psd':
-    p = ssp.Periodogram(f)
+    p = ssp.Periodogram(wf)
     p = p[:,:p.shape[1]/2+1]
 elif type == 'ar':
-    a = ssp.Autocorrelation(f)
+    a = ssp.Autocorrelation(wf)
     a, g = ssp.ARLevinson(a, pcm.speech_ar_order())
-    p = ssp.ARSpectrum(a, g, nSpec=64)
+    p = ssp.ARSpectrum(a, g, nSpec=128)
 elif type == 'snr':
-    p = ssp.Periodogram(f)
+    p = ssp.Periodogram(wf)
     n = ssp.Noise(p)
     p = ssp.SNRSpectrum(p, n)
     p = p[:,:p.shape[1]/2+1]
 
 # Draw it
-plt.bone()
-plt.yticks((0,63), ('0', 'fs/2'))
-plt.imshow(np.transpose(np.log10(p)), origin='lower')
-plt.show()
+fig = ssp.Figure(2, 1)
+p1 = fig.SpectrumPlot(p, pcm)
+p2 = fig.EnergyPlot(f, pcm)
+fig.show()

@@ -18,3 +18,4 @@ from .core import *
 # Others should probably not go into this namespace, but...
 from .ar import *
 from .gm import *
+from .plot import *
