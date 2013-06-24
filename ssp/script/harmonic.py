@@ -7,19 +7,19 @@
 # Author(s):
 #   Phil Garner, July 2012
 #
-from optparse import OptionParser
-from ssp import *
+from .. import ar
+from .. import core
 import numpy as np
 import matplotlib.pyplot as plt
 
 r = 1000
 
-a1 = ARHarmonicPoly(21, r, 0.99)
-a2 = ARHarmonicPoly(32, r, 0.99)
-s1 = ARSpectrum(a1, 1.0, 10010)
-s2 = ARSpectrum(a2, 1.0, 10010)
+a1 = ar.ARHarmonicPoly(21, r, 0.99)
+a2 = ar.ARHarmonicPoly(32, r, 0.99)
+s1 = ar.ARSpectrum(a1, 1.0, 10010)
+s2 = ar.ARSpectrum(a2, 1.0, 10010)
 
-fig = Figure(1,1)
+fig = core.Figure(1,1)
 ax = fig.subplot()
 ax.plot(np.log(s1))
 ax.plot(np.log(s2))

@@ -7,10 +7,11 @@
 # Author(s):
 #   Phil Garner
 #
-import numpy as np
-import matplotlib.pyplot as plt
+
 from .. import core
 
+import numpy as np
+import matplotlib.pyplot as plt
 
 def main():
   i = np.identity(30)
@@ -39,3 +40,5 @@ def main():
   o6Mat.imshow(o6)
 
   plt.show()
+  
+  return 0

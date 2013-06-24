@@ -46,7 +46,7 @@ def ARMatrix(a, order=10, method='matrix'):
     # Use the autocorrelation to populate the matrices.  Here, Yy runs
     # in ascending index, so we get coef in order right away.
     elif method == 'acmatrix':
-        ac = Autocorrelation(a)
+        ac = core.Autocorrelation(a)
         YY = np.ndarray((order, order))
         Yy = np.ndarray(order)
         for i in range(order):
@@ -298,7 +298,7 @@ def ARSparse(a, order=10, gamma=1.414):
         return ret, gain
 
     # Initialise with the ML solution
-    ac = Autocorrelation(a)
+    ac = core.Autocorrelation(a)
     coef, gain = ARLevinson(ac, order)
     x = 1.0 / np.abs(ARExcitation(a, coef, gain)[order:])
 
@@ -330,7 +330,7 @@ def ARStudent(a, order=10, df=1.0):
         return ret, gain
 
     # Initialise with the ML solution
-    ac = Autocorrelation(a)
+    ac = core.Autocorrelation(a)
     coef, gain = ARLevinson(ac, order)
     x = 1.0 / (ARExcitation(a, coef, gain)[order:]**2 + df)
 
@@ -398,7 +398,7 @@ def ARLogLikelihoodRatio(a, order=10):
         return ret
 
     # Usual Gaussian
-    ac = Autocorrelation(a)
+    ac = core.Autocorrelation(a)
     coef, gain = ARLevinson(ac, order)
     exn = ARExcitation(a, coef, gain)
     llGauss = - len(exn)/2 * np.log(2*np.pi) - 0.5 * np.dot(exn, exn)
@@ -460,6 +460,6 @@ def pulse_response(gm, pcm, period=100, order=18):
     p = gm.pulse(period, pcm)
     p = np.tile(p, w/period+1)
     p = core.Window(p[:w], np.hanning(w))
-    ac = Autocorrelation(p)
+    ac = core.Autocorrelation(p)
     a, g = ARLevinson(ac, order=order)
     return a, g

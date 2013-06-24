@@ -7,39 +7,45 @@
 # Author(s):
 #   Phil Garner
 #
-from optparse import OptionParser
-op = OptionParser()
-(option, arg) = op.parse_args()
-if (len(arg) < 1):
-    print "Need one arg"
-    exit(1)
-file = arg[0]
 
-import ssp
+from .. import ar
+from .. import core
+
+from optparse import OptionParser
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Load and process
-pcm = ssp.PulseCodeModulation()
-a = pcm.WavSource(file)
-a = ssp.ZeroFilter(a)
-f = ssp.Frame(a, size=256, period=80)
-type = ssp.parameter('Type', 'ar')
-if type == 'psd':
-    p = ssp.Periodogram(f)
-    p = p[:,:p.shape[1]/2+1]
-elif type == 'ar':
-    a = ssp.Autocorrelation(f)
-    a, g = ssp.ARLevinson(a, pcm.speech_ar_order())
-    p = ssp.ARSpectrum(a, g, nSpec=64)
-elif type == 'snr':
-    p = ssp.Periodogram(f)
-    n = ssp.Noise(p)
-    p = ssp.SNRSpectrum(p, n)
-    p = p[:,:p.shape[1]/2+1]
+def main():
+  op = OptionParser()
+  (option, arg) = op.parse_args()
+  if (len(arg) < 1):
+      print "Need one arg"
+      exit(1)
+  file = arg[0]
 
-# Draw it
-plt.bone()
-plt.yticks((0,63), ('0', 'fs/2'))
-plt.imshow(np.transpose(np.log10(p)), origin='lower')
-plt.show()
+  # Load and process
+  pcm = core.PulseCodeModulation()
+  a = pcm.WavSource(file)
+  a = core.ZeroFilter(a)
+  f = core.Frame(a, size=256, period=80)
+  type = core.parameter('Type', 'ar')
+  if type == 'psd':
+      p = core.Periodogram(f)
+      p = p[:,:p.shape[1]/2+1]
+  elif type == 'ar':
+      a = core.Autocorrelation(f)
+      a, g = ar.ARLevinson(a, pcm.speech_ar_order())
+      p = ar.ARSpectrum(a, g, nSpec=64)
+  elif type == 'snr':
+      p = core.Periodogram(f)
+      n = core.Noise(p)
+      p = core.SNRSpectrum(p, n)
+      p = p[:,:p.shape[1]/2+1]
+
+  # Draw it
+  plt.bone()
+  plt.yticks((0,63), ('0', 'fs/2'))
+  plt.imshow(np.transpose(np.log10(p)), origin='lower')
+  plt.show()
+
+  return 0
