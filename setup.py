@@ -21,7 +21,7 @@ setup(
     # This is the basic information about your project. Modify all this
     # information before releasing code publicly.
     name='ssp',
-    version='0.1a5',
+    version='0.1a6',
     description='SSP',
 
     url='http://github.com/bioidiap/ssp',
