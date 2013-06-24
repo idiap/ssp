@@ -21,7 +21,7 @@ setup(
     # This is the basic information about your project. Modify all this
     # information before releasing code publicly.
     name='ssp',
-    version='0.1a8',
+    version='0.1a9',
     description='SSP',
 
     url='http://github.com/bioidiap/ssp',
@@ -44,6 +44,7 @@ setup(
     # privileges when using buildout.
     install_requires=[
       'setuptools',
+      'numpy',
       'scipy',
       'matplotlib',
     ],

@@ -1,2 +1,2 @@
 include README.md
-recursive-include docs *.py *.rst
+recursive-include *.py *.rst
