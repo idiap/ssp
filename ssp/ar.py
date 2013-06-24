@@ -9,7 +9,7 @@
 import numpy as np
 import scipy.signal as sp
 import numpy.linalg as linalg
-import ssp
+from . import core
 
 class Autoregression:
     """
@@ -33,7 +33,7 @@ def ARMatrix(a, order=10, method='matrix'):
     # Follow the matrix based method to the letter.  elop contains the
     # poles reversed, coef is the poles in order.
     if method == 'matrix':
-        Y = ssp.Frame(a[:a.size-1], size=order, period=1, pad=False)
+        Y = core.Frame(a[:a.size-1], size=order, period=1, pad=False)
         y = a[order:]
 
         YY = np.dot(Y.T,Y)
@@ -178,8 +178,8 @@ def ARSpectrum(ar, gg, nSpec=256):
     Wrapper around scipy.signal.freqz() that both converts ar to
     filter coefficients and broadcasts over an array.
     """
-    ret = np.ndarray(ssp.newshape(ar.shape, nSpec))
-    for a, g, r in ssp.refiter([ar, gg, ret], ssp.newshape(ar.shape)):
+    ret = np.ndarray(core.newshape(ar.shape, nSpec))
+    for a, g, r in core.refiter([ar, gg, ret], core.newshape(ar.shape)):
         numer = np.sqrt(g)
         denom = -np.insert(a, 0, -1)
         tmp, r[...] = np.abs(sp.freqz(numer, denom, nSpec))**2
@@ -215,9 +215,9 @@ def ARCepstrumToPoly(cep, order=None):
     """
     if not order:
         order = cep.shape[-1]-1
-    ar = np.ndarray(ssp.newshape(cep.shape, order))
-    ag = np.ndarray(ssp.newshape(cep.shape, 1))
-    for c, a, g in ssp.refiter([cep, ar, ag], ssp.newshape(cep.shape)):
+    ar = np.ndarray(core.newshape(cep.shape, order))
+    ag = np.ndarray(core.newshape(cep.shape, 1))
+    for c, a, g in core.refiter([cep, ar, ag], core.newshape(cep.shape)):
         for i in range(order):
             sum = 0
             for k in range(i):
@@ -228,7 +228,7 @@ def ARCepstrumToPoly(cep, order=None):
             if (i < a.size):
                 a[i] += c[i]
         g[0] = np.exp(c[order])
-    return ar, ag.reshape(ssp.newshape(cep.shape))
+    return ar, ag.reshape(core.newshape(cep.shape))
 
 # AR excitation filter
 def ARExcitation(a, ar, gg):
@@ -298,7 +298,7 @@ def ARSparse(a, order=10, gamma=1.414):
         return ret, gain
 
     # Initialise with the ML solution
-    ac = ssp.Autocorrelation(a)
+    ac = Autocorrelation(a)
     coef, gain = ARLevinson(ac, order)
     x = 1.0 / np.abs(ARExcitation(a, coef, gain)[order:])
 
@@ -306,7 +306,7 @@ def ARSparse(a, order=10, gamma=1.414):
     # poles reversed, coef is the poles in order.
     for iter in range(5):
         X = np.diag(np.sqrt(x)) # Actually root of inverse of X
-        Y = np.dot(X, ssp.Frame(a[:a.size-1], size=order, period=1, pad=False))
+        Y = np.dot(X, core.Frame(a[:a.size-1], size=order, period=1, pad=False))
         y = np.dot(X, a[order:])
         YY = np.dot(Y.T,Y)
         Yy = np.dot(Y.T,y)
@@ -330,7 +330,7 @@ def ARStudent(a, order=10, df=1.0):
         return ret, gain
 
     # Initialise with the ML solution
-    ac = ssp.Autocorrelation(a)
+    ac = Autocorrelation(a)
     coef, gain = ARLevinson(ac, order)
     x = 1.0 / (ARExcitation(a, coef, gain)[order:]**2 + df)
 
@@ -338,7 +338,7 @@ def ARStudent(a, order=10, df=1.0):
     # poles reversed, coef is the poles in order.
     for iter in range(5):
         X = np.diag(np.sqrt(x)) # Actually root of inverse of X
-        Y = np.dot(X, ssp.Frame(a[:a.size-1], size=order, period=1, pad=False))
+        Y = np.dot(X, core.Frame(a[:a.size-1], size=order, period=1, pad=False))
         y = np.dot(X, a[order:])
         YY = np.dot(Y.T,Y)
         Yy = np.dot(Y.T,y)
@@ -459,7 +459,7 @@ def pulse_response(gm, pcm, period=100, order=18):
     w = 1024
     p = gm.pulse(period, pcm)
     p = np.tile(p, w/period+1)
-    p = ssp.Window(p[:w], np.hanning(w))
-    ac = ssp.Autocorrelation(p)
+    p = core.Window(p[:w], np.hanning(w))
+    ac = Autocorrelation(p)
     a, g = ARLevinson(ac, order=order)
     return a, g
