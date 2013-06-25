@@ -24,7 +24,7 @@ class Figure:
         self.cols = cols
         self.next = 1
         self.fig = plt.figure()
-        self.fig.set_tight_layout(True)
+        #self.fig.set_tight_layout(True)
 
     # Plot order: blue, green, red, ...
     def subplot(self):

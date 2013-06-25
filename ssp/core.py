@@ -91,8 +91,6 @@ class PulseCodeModulation:
     def WavSource(self, file):
         """ Reads a wav file into a numpy array """
         rate, audio = wavfile.read(file)
-        print rate
-        print audio
         if audio.dtype == 'int16':
             audio = np.cast['float'](audio)
             audio /= 32768
