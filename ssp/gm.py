@@ -9,7 +9,7 @@
 import numpy as np
 import numpy.linalg as linalg
 
-from ssp import *
+from . import core
 
 def pulse_poly(pulse, Tp, Tn):
     for i in range(Tp):
@@ -107,32 +107,32 @@ class GlottalModel:
                 (self.Rg, self.Rk, self.Fa) = params
             else:
                 # Defaults tested on emime/EF2
-                self.Rg = parameter('Rg', 1.0)
-                self.Rk = parameter('Rk', 0.2)
-                self.Fa = parameter('Fa', 200)
+                self.Rg = core.parameter('Rg', 1.0)
+                self.Rk = core.parameter('Rk', 0.2)
+                self.Fa = core.parameter('Fa', 200)
         elif self.ptype == 'zerofilter':
             if params is not None:
                 (self.zero) = params
             else:
-                self.zero = parameter('Zero', 0.97)
+                self.zero = core.parameter('Zero', 0.97)
         elif self.ptype == 'polefilter':
             if params is not None:
                 (self.pole) = params
             else:
-                self.pole = parameter('Pole', 0.97)
+                self.pole = core.parameter('Pole', 0.97)
         elif self.ptype == 'polezerofilter':
             if params is not None:
                 (self.pole, self.zero) = params
             else:
-                self.pole = parameter('Pole', 0.97)
-                self.zero = parameter('Zero', 1.0)
+                self.pole = core.parameter('Pole', 0.97)
+                self.zero = core.parameter('Zero', 1.0)
         elif self.ptype == 'polepairzerofilter':
             if params is not None:
                 (self.pole, self.angle, self.zero) = params
             else:
-                self.pole = parameter('Pole', 0.97)
-                self.angle = parameter('Angle', 0.0)
-                self.zero = parameter('Zero', 1.0)
+                self.pole = core.parameter('Pole', 0.97)
+                self.angle = core.parameter('Angle', 0.0)
+                self.zero = core.parameter('Zero', 1.0)
 
     def pulse(self, n, pcm, derivative=True):
         n = int(n)
@@ -151,13 +151,13 @@ class GlottalModel:
             Tn = int(T * 0.16)
             pulse_poly(pulse, Tp, Tn)
             if derivative:
-                pulse = ZeroFilter(pulse)
+                pulse = core.ZeroFilter(pulse)
         elif self.ptype == 'trig':
             Tp = int(T * 0.4)
             Tn = int(T * 0.16)
             pulse_trig(pulse, Tp, Tn)
             if derivative:
-                pulse = ZeroFilter(pulse)
+                pulse = core.ZeroFilter(pulse)
         elif self.ptype == 'gamma':
             Rg = 1.2
             Rk = 0.3
@@ -167,13 +167,13 @@ class GlottalModel:
             beta  = 0.16/(alpha-1)
             pulse_gamma(pulse, Te, alpha, beta)
             if derivative:
-                pulse = ZeroFilter(pulse)
+                pulse = core.ZeroFilter(pulse)
         elif self.ptype == 'igamma':
             alpha = 10
             beta  = 0.16*(alpha+1)
             pulse_igamma(pulse, T, alpha, beta)
             if derivative:
-                pulse = ZeroFilter(pulse)
+                pulse = core.ZeroFilter(pulse)
         elif self.ptype == 'lf':
             # These three are all in seconds
             Ta = 1.0/(2.0*np.pi*self.Fa)
@@ -189,19 +189,19 @@ class GlottalModel:
                 pulse[i] = -np.exp(-t*5)
         elif self.ptype == 'polefilter':
             pulse[T/2] = 1.0
-            pulse = PoleFilter(pulse, self.pole)
+            pulse = core.PoleFilter(pulse, self.pole)
         elif self.ptype == 'zerofilter':
             pulse[T/2] = 1.0
-            pulse = ZeroFilter(pulse, self.zero)
+            pulse = core.ZeroFilter(pulse, self.zero)
         elif self.ptype == 'polezerofilter':
             pulse[T/2] = 1.0
-            pulse = PoleFilter(pulse, self.pole)
-            pulse = PoleFilter(pulse, self.pole)
-            pulse = ZeroFilter(pulse, self.zero)
+            pulse = core.PoleFilter(pulse, self.pole)
+            pulse = core.PoleFilter(pulse, self.pole)
+            pulse = core.ZeroFilter(pulse, self.zero)
         elif self.ptype == 'polepairzerofilter':
             pulse[T/2] = 1.0
-            pulse = PolePairFilter(pulse, self.pole, self.angle)
-            pulse = ZeroFilter(pulse, self.zero)
+            pulse = core.PolePairFilter(pulse, self.pole, self.angle)
+            pulse = core.ZeroFilter(pulse, self.zero)
         elif self.ptype == 'multipulse':
             for i in range(24):
                 pulse[i] = 1
@@ -249,8 +249,8 @@ def GFilter(a, mag, angle, pole):
 
 def PFilter(a, mag, angle, pole):
     filter = a[::-1]
-    filter = ssp.PolePairFilter(filter, mag, angle)
+    filter = core.PolePairFilter(filter, mag, angle)
     filter = filter[::-1]
-    filter = ssp.ZeroFilter(filter, 1.0)
-    filter = ssp.PoleFilter(filter, pole)
+    filter = core.ZeroFilter(filter, 1.0)
+    filter = core.PoleFilter(filter, pole)
     return filter
