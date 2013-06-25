@@ -22,12 +22,12 @@ setup(
     # information before releasing code publicly.
     name='ssp',
     version='0.1a9',
-    description='SSP',
+    description='A small collection Speech Signal Processing functions',
 
-    url='http://github.com/bioidiap/ssp',
+    url='http://github.com/idiap/ssp',
     license='GPLv3',
     author='Phil Garner',
-    author_email='phil.garner@idiap.ch',
+    author_email='Phil.Garner@idiap.ch',
 
     # If you have a better, long description of your package, place it on the
     # 'doc' directory and then hook it here
@@ -86,7 +86,7 @@ setup(
     # useful here (http://pypi.python.org/pypi?%3Aaction=list_classifiers).
     classifiers = [
       'Development Status :: 4 - Beta',
-      'Intended Audience :: Developers',
+      'Intended Audience :: Researchers',
       'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',
       'Natural Language :: English',
       'Programming Language :: Python',
