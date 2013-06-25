@@ -18,20 +18,18 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-def command_line_arguments(command_line_parameters):
+def parse_arguments(command_line_parameters):
   """Defines the command line parameters that are accepted."""
 
   # create parser
   parser = argparse.ArgumentParser(description='Computes the spectrogram of an audio signal (wav file only)', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
   parser.add_argument('filename', type=file, help='Path to the file to process.')
   parser.add_argument('-t', '--type', type=str, choices=('ar', 'psd', 'snr'), default='ar', help='The type of spectrogram to generate')
+  parser.add_argument('-n', '--no-show', action='store_true', help='Do not call the show() method at the end of the script (mostly for testing purpose)')
   return parser.parse_args(command_line_parameters)
 
 
-def main(command_line_parameters = sys.argv):
-
-  # Collect command line arguments
-  args = command_line_arguments(command_line_parameters[1:])
+def spectrogram(args):
 
   # Load and process
   pcm = core.PulseCodeModulation()
@@ -58,10 +56,18 @@ def main(command_line_parameters = sys.argv):
   plt.bone()
   plt.yticks((0,63), ('0', 'fs/2'))
   plt.imshow(np.transpose(np.log10(p)), origin='lower')
-  plt.show()
+  if args.no_show == False:
+    plt.show()
 
   return 0
 
+def main(command_line_parameters = sys.argv):
+  """Executes the main function"""
+  # do the command line parsing
+  args = parse_arguments(command_line_parameters[1:])
+
+  # perform face verification test
+  return spectrogram(args)
 
 if __name__ == "__main__":
   main()

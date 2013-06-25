@@ -47,7 +47,10 @@ setup(
       'numpy',
       'scipy',
       'matplotlib',
+      'nose',
     ],
+    
+    test_suite='nose.main',
 
     # This entry defines which scripts you will have inside the 'bin' directory
     # once you install the package (or run 'bin/buildout'). The order of each

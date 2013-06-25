@@ -10,10 +10,21 @@
 
 from .. import core
 
+import argparse
+import sys
 import numpy as np
 import matplotlib.pyplot as plt
 
-def main():
+def parse_arguments(command_line_parameters):
+  """Defines the command line parameters that are accepted."""
+
+  # create parser
+  parser = argparse.ArgumentParser(description='Warps (TODO: add documentation)', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+  parser.add_argument('-n', '--no-show', action='store_true', help='Do not call the show() method at the end of the script (mostly for testing purpose)')
+  return parser.parse_args(command_line_parameters)
+
+def warp(args):
+
   i = np.identity(30)
   o1 = core.AllPassWarpOppenheim(i, alpha=0, size=40)
   o2 = core.AllPassWarpOppenheim(i, alpha=0.1, size=40)
@@ -38,7 +49,19 @@ def main():
   o3Mat.imshow(o3.T)
   o5Mat.imshow(o5)
   o6Mat.imshow(o6)
-
-  plt.show()
+ 
+  if args.no_show == False:
+    plt.show()
   
   return 0
+
+def main(command_line_parameters = sys.argv):
+  """Executes the main function"""
+  # do the command line parsing
+  args = parse_arguments(command_line_parameters[1:])
+
+  # perform face verification test
+  return warp(args)
+
+if __name__ == "__main__":
+  main()
