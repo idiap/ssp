@@ -103,6 +103,7 @@ def lf_te(T0, alpha, omega, epsilon, te=None):
     Given an LF model in terms of alpha, omega and epsilon, calculates
     Te using Newton-Raphson.
     """
+    print alpha, omega,
     tc = T0
     tp = np.pi / omega
     if te is None:
@@ -126,9 +127,12 @@ def lf_te(T0, alpha, omega, epsilon, te=None):
             * (exp*(1-epsilon*(tc-te))-exp**2) / (1-exp)**2
             )
         te -= f/fd
-        if te < tp:
+        if te <= tp or te >= tc:
+            print "None"
+            return None
             # With proper initialisation, this should not happen
-            raise ValueError('te < tp')
+            #raise ValueError('te < tp')
+    print te
     return te
 
 class GlottalModel:

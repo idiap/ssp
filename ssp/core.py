@@ -131,7 +131,7 @@ class PulseCodeModulation:
         return float(b) / self.rate
 
     def period_to_seconds(self, n):
-        """ Returns the time corrensponding to a given number of samples """
+        """ Returns the time corresponding to a given number of samples """
         return n / float(self.rate)
 
     def seconds_to_period(self, sec, power=None):
