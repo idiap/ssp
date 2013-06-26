@@ -3,18 +3,18 @@
 SSP is released under the Gnu GPL version 3.  See the file `COPYING`
 for details.
 
-To install SSP, something like this ought to work:
+To install SSP from git, something like this ought to work:
 ```sh
-mkdir lib
-cd lib
+cd ~/src  # Just for example
 git clone git@github.com:idiap/ssp.git
-export PYTHONPATH=~/lib
+cd ssp
+python bootstrap.py
+./bin/buildout
 ```
-
 Then in some working directory
 ```sh
-ln -s ~/lib/ssp/bin/pitch.py
-ln -s ~/lib/ssp/bin/codec.py
+ln -s ~/src/ssp/bin/pitch.py
+ln -s ~/src/ssp/bin/codec.py
 ```
 
 Then you can say
@@ -22,6 +22,17 @@ Then you can say
 pitch.py test.wav  # Graphical view of what's going on
 codec.py -h
 codec.py -r 22050 -p EM1.wav EM1.lf0
+```
+
+Alternatively, SSP is available on
+[PyPI](https://pypi.python.org/pypi) at
+https://pypi.python.org/pypi/ssp  That's available by typing
+```sh
+pip install ssp  # Root level installation
+```
+or
+```sh
+pip install ssp --user  # User level in ~/.local
 ```
 
 Otherwise, see the wiki at https://github.com/idiap/ssp/wiki
