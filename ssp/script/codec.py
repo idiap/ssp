@@ -340,7 +340,7 @@ def main():
           (arr, g, pitch, hnr) = encode(a, pcm)
 
           # The cepstrum part is just like HTK
-          c = ar.ARCepstrum(ar, g, lpOrder[r])
+          c = ar.ARCepstrum(arr, g, lpOrder[r])
           period = float(framePeriod)/r
           core.HTKSink(saveFile, c, period)
 
