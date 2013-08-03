@@ -37,6 +37,23 @@ pip install ssp --user  # User level in ~/.local
 
 Otherwise, see the wiki at https://github.com/idiap/ssp/wiki
 
+The pitch tracker in SSP is documented in the paper:
+```
+@Article{Garner2013,
+  author =       "Garner, Philip N. and Cernak, Milos and Motlicek,
+                  Petr",
+  title =        "A Simple Continuous Pitch Estimation Algorithm",
+  journal =      "IEEE Signal Processing Letters",
+  year =         2013,
+  month =        "January",
+  volume =       20,
+  number =       1,
+  pages =        "102--105"
+}
+```
+and there is a [downloadable
+pdf](http://publications.idiap.ch/downloads/papers/2012/Garner_SPL_2012.pdf).
+
 --
 [Phil Garner](http://www.idiap.ch/~pgarner)  
 June 2013
