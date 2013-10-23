@@ -6,6 +6,7 @@
 # Author(s):
 #   Phil Garner, August 2011
 #
+import sys
 import numpy as np
 import numpy.linalg as linalg
 from scipy.io import wavfile
@@ -142,7 +143,7 @@ class PulseCodeModulation:
         period = self.rate * sec
         if power is None:
             return int(period)
-            
+
         # May be faster than log2()
         s = 1
         while s < period:
@@ -323,7 +324,7 @@ def AllPassWarpOppenheim(a, alpha=0.0, size=None):
         for f in range(a.shape[0]):
             ret[f] = AllPassWarpOppenheim(a[f], alpha, size)
         return ret
-    
+
     # Oppenheim's recursion; very slow
     t = np.zeros(osize)
     y = np.zeros(osize)
@@ -364,7 +365,7 @@ def ARAllPassWarp(a, g, alpha=0, matrix=None):
 # AllPass warp of autocorrelation
 def AutocorrelationAllPassWarp(a, alpha=0, size=None, matrix=None):
 
-    # Rows defaults to 
+    # Rows defaults to
     if size is None:
         rows = a.shape[-1]
     else:
@@ -431,7 +432,7 @@ parmKind = {
 from struct import pack, unpack
 from os import makedirs
 from os.path import dirname, exists
-def HTKSink(fileName, a, period=0.01, kind="USER"):
+def HTKSink(fileName, a, period=0.01, kind="USER", native=False):
     if (a.ndim != 2):
         print "Dimension must be 2"
         exit(1)
@@ -440,7 +441,10 @@ def HTKSink(fileName, a, period=0.01, kind="USER"):
     for k in kind.split('_'):
         htkKind |= parmKind[k]
     htkPeriod = period * 1e7 + 0.5
-    header = pack('>iihh', a.shape[0], htkPeriod, a.shape[1]*4, htkKind)
+    fmt = '>iihh'
+    if native:
+        fmt = 'iihh'
+    header = pack(fmt, a.shape[0], htkPeriod, a.shape[1]*4, htkKind)
 
     dir = dirname(fileName)
     if dir and not exists(dir):
@@ -450,19 +454,26 @@ def HTKSink(fileName, a, period=0.01, kind="USER"):
         # that it is written as 4 bytes.  Casting doesn't seem to
         # work.
         f.write(header)
-        v = np.array(a, dtype='f').byteswap()
+        v = np.array(a, dtype='f')
+        if ((not native) and (sys.byteorder == 'little')):
+            v = v.byteswap()
         v.tofile(f)
 
 # Source from HTK file
-def HTKSource(fileName):
+def HTKSource(fileName, native=False):
+    fmt = '>iihh'
+    if native:
+        fmt = 'iihh'
     with open(fileName, 'r') as f:
         # The resulting array here is float32.  We could explicitly
         # cast it to double, but that will happen further up in the
         # program anyway.
         header = f.read(12)
-        (htkSize, htkPeriod, htkVecSize, htkKind) = unpack('>iihh', header)
+        (htkSize, htkPeriod, htkVecSize, htkKind) = unpack(fmt, header)
         data = np.fromfile(f, dtype='f')
-        a = data.reshape((htkSize, htkVecSize / 4)).byteswap()
+        a = data.reshape((htkSize, htkVecSize / 4))
+        if ((not native) and (sys.byteorder == 'little')):
+            a = a.byteswap()
     return a, htkPeriod * 1e-7
 
 # Calculate mean; typically cepstral, but it doesn't matter here
@@ -684,7 +695,7 @@ def ACPitch(a, pcm, loPitch=40, hiPitch=500):
         else:
             hnr[i] = fnac / (1.0 - fnac)
         var[i] = (1.0 / hnr[i] * rng)**2
-    
+
     # Kalman smoother again
     # 1e4 is about right for < 10ms frame shift.  It was 1e8 for ~25ms
     kPitch, kVar = kalman(pitch, var, 1e4, mpitch, prange**2)
