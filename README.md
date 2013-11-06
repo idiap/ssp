@@ -3,25 +3,31 @@
 SSP is released under the Gnu GPL version 3.  See the file `COPYING`
 for details.
 
-To install SSP from git, something like this ought to work:
+To install SSP from git, just clone it into a working directory:
 ```sh
 cd ~/src  # Just for example
 git clone git@github.com:idiap/ssp.git
 cd ssp
-python bootstrap.py
-./bin/buildout
 ```
-Then in some working directory
+Or, if you work in a different directory:
 ```sh
-ln -s ~/src/ssp/bin/pitch.py
-ln -s ~/src/ssp/bin/codec.py
+cd where-I-work
+ln -s ~/src/ssp/pitch.py
+ln -s ~/src/ssp/codec.py
 ```
+i.e., you shouldn't need to set `PYTHONPATH`
 
 Then you can say
 ```sh
 pitch.py test.wav  # Graphical view of what's going on
 codec.py -h
 codec.py -r 22050 -p EM1.wav EM1.lf0
+```
+
+If you know what buildout is:
+```sh
+python bootstrap.py
+./bin/buildout
 ```
 
 Alternatively, SSP is available on
