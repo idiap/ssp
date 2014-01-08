@@ -34,6 +34,8 @@ op.add_option("-x", dest="excitation", action="store_true", default=False,
               help="Output excitation waveform instead of encoding")
 op.add_option("-n", dest="normalise", action="store_true", default=False,
               help="Normalise output to same power as input")
+op.add_option("-l", dest="lsp", action="store_true", default=False,
+              help="Read and write line spectra instead of cepstra")
 (opt, arg) = op.parse_args()
 
 # For excitation we need to disable OLA
@@ -336,7 +338,13 @@ for pair in pairs:
         (ar, g, pitch, hnr) = encode(a, pcm)
 
         # The cepstrum part is just like HTK
-        c = ssp.ARCepstrum(ar, g, lpOrder[r])
+        if opt.lsp:
+            # The gain is not part of the LSP; just append it
+            l = ssp.ARLineSpectra(ar)
+            lg = np.reshape(np.log(g), (len(g), 1))
+            c = np.append(l, lg, axis=-1)
+        else:
+            c = ssp.ARCepstrum(ar, g, lpOrder[r])
         period = float(framePeriod)/r
         ssp.HTKSink(saveFile, c, period)
 
@@ -363,6 +371,11 @@ for pair in pairs:
         pitch = np.exp(np.loadtxt(loadFileLF0))
         hnr = np.loadtxt(loadFileHNR)
         c, period = ssp.HTKSource(loadFile)
-        (ar, g) = ssp.ARCepstrumToPoly(c)
+        if opt.lsp:
+            # Separate out the gain and LSP
+            ar = ssp.ARLineSpectraToPoly(c[:,0:-1])
+            g = np.exp(c[:,-1])
+        else:
+            (ar, g) = ssp.ARCepstrumToPoly(c)
         d = decode((ar, g, pitch, hnr))
         pcm.WavSink(d, saveFile)

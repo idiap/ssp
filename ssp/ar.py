@@ -463,3 +463,61 @@ def pulse_response(gm, pcm, period=100, order=18):
     ac = core.Autocorrelation(p)
     a, g = ARLevinson(ac, order=order)
     return a, g
+
+def ARLineSpectra(ar):
+    """
+    Convert AR coeffs to LSPs
+
+    From wikipedia:
+    A palindromic polynomial (i.e., P) of odd degree has -1 as a root.
+    An antipalindromic polynomial (i.e., Q) has 1 as a root.
+    An antipalindromic polynomial of even degree has -1 and 1 as roots
+    """
+    order = ar.shape[-1]
+    ret = np.zeros(ar.shape)
+    for a, o in core.refiter([ar, ret], core.newshape(ar.shape)):
+        p = np.ones((order+2))
+        q = np.ones((order+2))
+        q[-1] = -1.0
+        for i in range(order):
+            p[i+1] = -a[i] - a[order-i-1]
+            q[i+1] = -a[i] + a[order-i-1]
+        pr = np.roots(p)
+        qr = np.roots(q)
+
+        j = 0
+        an = np.ndarray((order+2))
+        for i in range(len(pr)):
+            if np.imag(pr[i]) >= 0.0:
+                an[j] = np.angle(pr[i])
+                j += 1
+            if np.imag(qr[i]) >= 0.0:
+                an[j] = np.angle(qr[i])
+                j += 1
+        # The angle list (an) will always contain both 0 and pi; they
+        # will move to the ends after the sort
+        o[...] = np.sort(an)[1:-1]
+    return ret;
+
+def ARLineSpectraToPoly(ls):
+    """
+    Convert LSPs back to AR coeffs
+    """
+    order = ls.shape[-1]
+    ret = np.zeros(ls.shape)
+    for a, o in core.refiter([ls, ret], core.newshape(ls.shape)):
+        # Reconstruct the full double sided set of roots
+        pqr = np.ones((order*2+2), dtype='complex')
+        c = np.cos(a)
+        s = np.sin(a)
+        pqr.real[1:order+1] = c
+        pqr.imag[1:order+1] = s
+        pqr[order+1] = -1
+        pqr.real[order+2:] = c[::-1]
+        pqr.imag[order+2:] = -s[::-1]
+
+        # Convert the roots back to polynomials
+        pqr = np.reshape(pqr, (order+1,2))
+        ar = (np.poly(pqr[:,1]) + np.poly(pqr[:,0])) / 2
+        o[...] = -ar[1:-1]
+    return ret
