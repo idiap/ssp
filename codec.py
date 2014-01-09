@@ -36,6 +36,8 @@ op.add_option("-n", dest="normalise", action="store_true", default=False,
               help="Normalise output to same power as input")
 op.add_option("-l", dest="lsp", action="store_true", default=False,
               help="Read and write line spectra instead of cepstra")
+op.add_option("-N", dest="native", action="store_true", default=False,
+              help="Read and write HTK files using native byte order")
 (opt, arg) = op.parse_args()
 
 # For excitation we need to disable OLA
@@ -346,7 +348,7 @@ for pair in pairs:
         else:
             c = ssp.ARCepstrum(ar, g, lpOrder[r])
         period = float(framePeriod)/r
-        ssp.HTKSink(saveFile, c, period)
+        ssp.HTKSink(saveFile, c, period, native=opt.native)
 
         # F0 and HNR are both text formats
         (path, ext) = splitext(saveFile)
@@ -370,7 +372,7 @@ for pair in pairs:
         loadFileHNR = path + ".hnr"
         pitch = np.exp(np.loadtxt(loadFileLF0))
         hnr = np.loadtxt(loadFileHNR)
-        c, period = ssp.HTKSource(loadFile)
+        c, period = ssp.HTKSource(loadFile, native=opt.native)
         if opt.lsp:
             # Separate out the gain and LSP
             ar = ssp.ARLineSpectraToPoly(c[:,0:-1])
