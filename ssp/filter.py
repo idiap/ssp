@@ -30,6 +30,20 @@ class Filter:
         self.zero = np.append(self.zero, z)
         self.solved = False
 
+    def addConjugatePole(self, z, arg=None):
+        # If an angle is given, assume it's a polar value and convert
+        if arg:
+            z = abs(z)*(np.cos(arg) + np.sin(arg)*1j)
+        self.pole = np.append(self.pole, [z, z.conjugate()])
+        self.solved = False
+
+    def addConjugateZero(self, z, arg=None):
+        # If an angle is given, assume it's a polar value and convert
+        if arg:
+            z = abs(z)*(np.cos(arg) + np.sin(arg)*1j)
+        self.zero = np.append(self.zero, [z, z.conjugate()])
+        self.solved = False
+
     def solve(self):
         if (len(self.pole) == 0):
             self.a = np.ones((1))
@@ -40,8 +54,6 @@ class Filter:
         else:
             self.b = np.poly(self.zero)
         self.solved = True
-        print "a:", self.a
-        print "b:", self.b
 
     def filter(self, a):
         if not self.solved:
