@@ -293,3 +293,12 @@ def PFilter(a, mag, angle, pole):
     filter = core.ZeroFilter(filter, 1.0)
     filter = core.PoleFilter(filter, pole)
     return filter
+
+def PPFilter(a, mag, angle, pole):
+    filter = a[::-1]
+    filter = core.PolePairFilter(filter, mag, angle)
+    filter = filter[::-1]
+    filter = core.ZeroFilter(filter, 1.0)
+    filter = core.PoleFilter(filter, pole)
+    filter = core.PoleFilter(filter, pole)
+    return filter

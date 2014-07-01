@@ -19,3 +19,4 @@ from .core import *
 from .ar import *
 from .gm import *
 from .plot import *
+from .filter import *
