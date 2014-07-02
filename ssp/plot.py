@@ -95,8 +95,8 @@ class SpectrumPlot(FramePlot):
     """
     def __init__(self, fig, data, pcm):
         FramePlot.__init__(self, fig, data)
-        self.max = 10*np.log10(np.amax(data))
-        self.min = 10*np.log10(np.amin(data))
+        self.max = 10*np.log10(np.max(data))
+        self.min = 10*np.log10(np.min(data))
         fig.specplot(self.axT, self.data, pcm)
         self.axT.set_ylabel('Frequency (Hz)')
         self._plotF(0)
@@ -105,7 +105,7 @@ class SpectrumPlot(FramePlot):
         self.axF.clear()
         self.axF.plot(10*np.log10(self.data[frame])-self.max)
         self.axF.set_xlim(0, self.data.shape[-1]-1)
-        self.axF.set_ylim(np.max([self.min, -90]), 0)
+        self.axF.set_ylim(np.max([self.min-self.max, -90]), 0)
         self.axF.set_ylabel('Level (dB)')
         self.axF.grid(True)
 
@@ -120,7 +120,7 @@ class EnergyPlot(FramePlot):
         self.min = 10*np.log10(np.amin(e))
         self.axT.plot(10*np.log10(e)-self.max)
         self.axT.set_xlim(0, self.data.shape[0]-1)
-        self.axT.set_ylim(np.max([self.min, -90]), 0)
+        self.axT.set_ylim(np.max([self.min-self.max, -90]), 0)
         self.axT.set_ylabel('Level (dB)')
         self.axT.grid(True)
         self._plotF(0)

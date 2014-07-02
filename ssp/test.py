@@ -1,37 +1,55 @@
 #!/usr/bin/env python
-# vim: set fileencoding=utf-8 :
-# Laurent El Shafey <laurent.el-shafey@idiap.ch>
 #
-# Copyright (C) 2011-2013 Idiap Research Institute, Martigny, Switzerland
+# Copyright 2014 by Idiap Research Institute, http://www.idiap.ch
 #
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, version 3 of the License.
+# See the file COPYING for the licence associated with this software.
 #
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-# GNU General Public License for more details.
+# Author(s):
+#   Phil Garner, January 2014
 #
-# You should have received a copy of the GNU General Public License
-# along with this program. If not, see <http://www.gnu.org/licenses/>.
-
-"""A few checks
-"""
-
-import os, sys
 import unittest
-import tempfile, shutil
+import ssp
+import numpy as np
+import numpy.testing as npt
 
-class SSPTest(unittest.TestCase):
-  """Performs various tests."""
+class TestSSP(unittest.TestCase):
+    """Tests for SSP package"""
 
-  def test01_scripts(self):
-    """Tests a script"""
+    def setUp(self):
+        """
+        Generate one (short) frame of a 1 kHz sinusoid at a sampling
+        rate of 16 kHz.  It doesn't matter too much what it is, just
+        that it is representative of some natural signal.
+        """
+        self.pcm = ssp.PulseCodeModulation(16000)
+        self.seq = np.zeros(64)
+        p = self.pcm.seconds_to_period(1.0/1000);
+        for s in range(len(self.seq)):
+            self.seq[s] = np.sin(2*np.pi * s/p)
+        w = ssp.nuttall(len(self.seq)+1)
+        w = np.delete(w, -1)
+        self.seq = ssp.Window(self.seq, w)
 
-    # warp script
-    from ssp.script.warp import warp
-    parameters = [
-      '--no-show', 
-    ]
-    self.assertEqual(warp(parameters), 0)
+    def testCep(self):
+        order = 4
+        ac = ssp.Autocorrelation(self.seq)
+        ar, g = ssp.ARLevinson(ac, order)
+        print "ar: ", ar
+        cep = ssp.ARCepstrum(ar, g)
+        print "cep:", cep
+        ar2, g2 = ssp.ARCepstrumToPoly(cep)
+        print "ar: ", ar2
+        npt.assert_array_almost_equal(ar, ar2)
+        npt.assert_almost_equal(g, g2)
+
+    def testLSP(self):
+        order = 4
+        ac = ssp.Autocorrelation(self.seq)
+        ar, g = ssp.ARLevinson(ac, order)
+        print "ar:", ar
+        ls = ssp.ARLineSpectra(ar)
+        print "ls:", ls
+        ar2 = ssp.ARLineSpectraToPoly(ls)
+        print "ar:", ar2
+        npt.assert_array_almost_equal(ar, ar2)
+
