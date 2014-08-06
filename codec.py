@@ -258,14 +258,6 @@ def decode((ar, g, pitch, hnr)):
         hpole1 = ssp.parameter("HPole1", 0.98)
         hpole2 = ssp.parameter("HPole2", 0.8)
         angle = pcm.hertz_to_radians(np.mean(pitch)) * ssp.parameter("Angle", 1.0)
-        if hfilt == 'pp':
-            h = ssp.ZeroFilter(h, 1.0)
-            h = ssp.PolePairFilter(h, hpole1, angle)
-        if hfilt == 'g':
-            h = ssp.GFilter(h, hpole1, angle, hpole2)
-        if hfilt == 'p':
-            h = ssp.PFilter(h, hpole1, angle, hpole2)
-        fh = ssp.Frame(h, size=frameSize, period=framePeriod)
 
         # Noise part
         n = np.random.normal(size=nSamples)

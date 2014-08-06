@@ -30,6 +30,11 @@ class Filter:
         self.zero = np.append(self.zero, z)
         self.solved = False
 
+    def clear(self):
+        self.pole.resize((0))
+        self.zero.resize((0))
+        self.solved = False
+
     def addConjugatePole(self, z, arg=None):
         # If an angle is given, assume it's a polar value and convert
         if arg:
