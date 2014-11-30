@@ -10,6 +10,7 @@ import numpy as np
 import numpy.linalg as linalg
 
 from . import core
+from . import filter
 
 def pulse_poly(pulse, Tp, Tn):
     for i in range(Tp):
@@ -251,3 +252,99 @@ class GlottalModel:
         # sample, so the power is the length of the pulse
         pulse *= np.sqrt(T) / linalg.norm(pulse)
         return pulse
+
+
+class IncrementalFilter(filter.Filter):
+    """
+    Filter, but implemented by hand so we can get the results sample by sample.
+    Only does poles for now.
+    """
+    def __init__(self):
+        filter.Filter.__init__(self)
+        self.state = None;
+
+    def alloc(self):
+        if not self.solved:
+            self.solve()
+        self.state = np.zeros((len(self.a)))
+
+    def reset(self, start=0):
+        if self.state == None:
+            return
+        for i in range(start, len(self.state)):
+            self.state[i] = 0.0
+
+    def stall(self):
+        if self.state == None:
+            return
+        for i in range(1, len(self.state)):
+            self.state[i] = self.state[0]
+
+    def filter(self, x):
+        if self.state == None:
+            self.alloc()
+            print "a:", self.a
+        for i in range(1, len(self.state)):
+            self.state[-i] = self.state[-i-1]
+        self.state[0] = -x
+        self.state[0] = -np.dot(self.state, self.a)
+        return self.state[0]
+
+class MaxPhaseGlottis:
+    def __init__(self):
+        self.py = 0.0
+        self.max = 0.0
+        self.maxphase = IncrementalFilter()
+        self.maxphase.addConjugatePole(1, 0) # some default
+        self.minphase = IncrementalFilter()
+        self.minphase.addConjugatePole(core.parameter("GlottisPole", 0.9))
+        #self.minphase.addZero(1)
+        self.closure = core.parameter("GlottisClosure", 0.1)
+
+    def setpolepair(self, mag, angle):
+        self.maxphase.clear()
+        self.maxphase.addConjugatePole(1/mag+1e-8, angle)
+        self.maxphase.solve()
+
+    def reset(self):
+        self.maxphase.reset()
+        self.minphase.reset()
+
+    def glotter(self, e):
+        y = np.ndarray((len(e)))
+        for i in range(len(e)):
+            y[i] = self.maxphase.filter(e[i])
+            y[i] = self.minphase.filter(y[i])
+            if y[i] > self.max:
+                self.max = y[i]
+            if y[i] < 0.0:
+                y[i] = 0.0
+            # Gradient -5 is a bit more than the excitation is likely to yield
+            if (y[i]-self.py < -5) and (y[i] < (self.max * self.closure)):
+                self.maxphase.reset()
+                self.minphase.stall()
+            self.py = y[i]
+        return y
+
+class MinPhaseGlottis:
+    def __init__(self):
+        self.py = 0.0
+        self.maxphase = filter.Filter()
+        self.maxphase.addConjugatePole(1, 0) # some default
+        self.minphase = filter.Filter()
+        self.minphase.addConjugatePole(core.parameter("GlottisPole", 0.99))
+        self.minphase.addZero(1)
+
+    def setpolepair(self, mag, angle):
+        self.maxphase.clear()
+        self.maxphase.addConjugatePole(mag+1e-8, angle)
+        self.maxphase.solve()
+
+    def reset(self):
+        self.maxphase.reset()
+        self.minphase.reset()
+
+    def glotter(self, e):
+        x = self.maxphase.filter(e)
+        y = self.minphase.filter(x)
+        return y

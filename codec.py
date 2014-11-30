@@ -38,6 +38,8 @@ op.add_option("-l", dest="lsp", action="store_true", default=False,
               help="Read and write line spectra instead of cepstra")
 op.add_option("-N", dest="native", action="store_true", default=False,
               help="Read and write HTK files using native byte order")
+op.add_option("-g", dest="graphic", action="store",
+              help="Show graphic feedback")
 (opt, arg) = op.parse_args()
 
 # For excitation we need to disable OLA
@@ -58,7 +60,8 @@ else:
 lpOrder = {
     8000: 10,
     16000: 24,
-    22050: 24
+    22050: 24,
+    32000: 34
 }
 
 
@@ -109,7 +112,7 @@ def encode(a, pcm):
     elif lp == 'student':
         ar, g = ssp.ARStudent(w, lpOrder[r], ssp.parameter('DoF', 50.0))
 
-    if False:
+    if opt.graphic == "pitch":
         fig = ssp.Figure(5, 1)
         #stddev = np.sqrt(kVar)
         sPlot = fig.subplot()
@@ -118,7 +121,7 @@ def encode(a, pcm):
         #sPlot.plot(kPitch - stddev, 'b')
         sPlot.set_xlim(0, len(pitch))
         sPlot.set_ylim(0, 500)
-        plt.show()
+        fig.show()
 
     return (ar, g, pitch, hnr)
 
@@ -143,17 +146,16 @@ def decode((ar, g, pitch, hnr)):
 
     ex = ssp.parameter('Excitation', 'synth')
 
-    # Use the original AR residual; it should be a very good
-    # reconstruction.
+    # Use the original AR residual; it should be a very good reconstruction.
     if ex == 'ar':
         e = ssp.ARExcitation(f, ar, g)
 
     # Just noise.  This is effectively a whisper synthesis.
     elif ex == 'noise':
-        e = np.random.normal(size=f.shape)
+        e = np.random.normal(size=(nFrames, frameSize))
 
     # Just harmonics, and with a fixed F0.  This is the classic robot
-    # syntheisis.
+    # synthesis.
     elif ex == 'robot':
         ew = np.zeros(nSamples)
         period = int(1.0 / 200 * r)
@@ -161,8 +163,7 @@ def decode((ar, g, pitch, hnr)):
             ew[i] = period
         e = ssp.Frame(ew, size=frameSize, period=framePeriod)
 
-    # Synthesise harmonics plus noise in the ratio suggested by the
-    # HNR.
+    # Synthesise harmonics plus noise in the ratio suggested by the HNR.
     elif ex == 'synth':
         # Harmonic part
         mperiod = int(1.0 / np.mean(pitch) * r)
@@ -192,8 +193,8 @@ def decode((ar, g, pitch, hnr)):
         hgain = ssp.parameter("HGain", 1.0)
         e = fn + fh * hgain
 
-    # Like harmonics plus noise, but with explicit sinusoids instead
-    # of time domain impulses.
+    # Like harmonics plus noise, but with explicit sinusoids instead of time
+    # domain impulses.
     elif ex == 'sine':
         order = 20
         sine = ssp.Harmonics(r, order)
@@ -211,9 +212,8 @@ def decode((ar, g, pitch, hnr)):
             fn[i] *= np.sqrt(1.0 / (hnr[i] + 1))
         e = fn + fh*10
 
-    # High order linear prediction.  Synthesise the harmonics using
-    # noise to excite a high order polynomial with roots resembling
-    # harmonics.
+    # High order linear prediction.  Synthesise the harmonics using noise to
+    # excite a high order polynomial with roots resembling harmonics.
     elif ex == 'holp':
         # Some noise
         n = np.random.normal(size=nSamples)
@@ -258,6 +258,10 @@ def decode((ar, g, pitch, hnr)):
         hpole1 = ssp.parameter("HPole1", 0.98)
         hpole2 = ssp.parameter("HPole2", 0.8)
         angle = pcm.hertz_to_radians(np.mean(pitch)) * ssp.parameter("Angle", 1.0)
+        if hfilt == 'pp':
+            h = ssp.ZeroFilter(h, 1.0)
+            h = ssp.PolePairFilter(h, hpole1, angle)
+        fh = ssp.Frame(h, size=frameSize, period=framePeriod)
 
         # Noise part
         n = np.random.normal(size=nSamples)
@@ -267,6 +271,101 @@ def decode((ar, g, pitch, hnr)):
         nf = ssp.parameter("NoiseFreq", 4000)
         if npole is not None:
             n = ssp.PolePairFilter(n, npole, pcm.hertz_to_radians(nf))
+        fn = ssp.Frame(n, size=frameSize, period=framePeriod)
+        for i in range(len(fn)):
+            fn[i] *= np.sqrt(1.0 / (hnr[i] + 1))
+
+        # Combination
+        assert(len(fh) == len(fn))
+        hgain = ssp.parameter("HGain", 1.0)
+        e = fn + fh * hgain
+        hnw = np.hanning(frameSize)
+        for i in range(len(e)):
+            ep = ssp.Window(e[i], hnw)
+            #ep = e[i]
+            eac = ssp.Autocorrelation(ep)
+            ea, eg = ssp.ARLevinson(eac, order=lpOrder[r])
+            e[i] = ssp.ARExcitation(e[i], ea, eg)
+
+    elif ex == 'ceplf':
+        omega, alpha = ssp.glottal_pole_lf(
+            f, pcm, pitch, hnr, visual=(opt.graphic == "ceplf"))
+        epsilon = ssp.parameter("Epsilon", 5000.0)
+        h = np.zeros(nSamples)
+        i = 0
+        frame = 0
+        while i < nSamples and frame < len(pitch):
+            period = int(1.0 / pitch[frame] * r)
+            if i + period > nSamples:
+                break
+            weight = np.sqrt(hnr[frame] / (hnr[frame] + 1))
+            pu = np.zeros((period))
+            T0 = pcm.period_to_seconds(period)
+            print T0,
+            Te = ssp.lf_te(T0, alpha[frame], omega[frame], epsilon)
+            if Te:
+                pu = ssp.pulse_lf(pu, T0, Te, alpha[frame], omega[frame], epsilon)
+            h[i:i+period] = pu * weight
+            i += period
+            frame = i // framePeriod
+        fh = ssp.Frame(h, size=frameSize, period=framePeriod)
+
+        # Noise part
+        n = np.random.normal(size=nSamples)
+        zero = ssp.parameter("NoiseZero", 1.0)
+        n = ssp.ZeroFilter(n, zero) # Include the radiation impedance
+        fn = ssp.Frame(n, size=frameSize, period=framePeriod)
+        for i in range(len(fn)):
+            fn[i] *= np.sqrt(1.0 / (hnr[i] + 1))
+
+        # Combination
+        assert(len(fh) == len(fn))
+        hgain = ssp.parameter("HGain", 1.0)
+        e = fn + fh * hgain
+        hnw = np.hanning(frameSize)
+        for i in range(len(e)):
+            ep = ssp.Window(e[i], hnw)
+            #ep = e[i]
+            eac = ssp.Autocorrelation(ep)
+            ea, eg = ssp.ARLevinson(eac, order=lpOrder[r])
+            e[i] = ssp.ARExcitation(e[i], ea, eg)
+
+    elif ex == 'cepgm':
+        # Infer the unstable poles via complex cepstrum, then build an explicit
+        # glottal model.
+        theta, magni = ssp.glottal_pole_gm(
+            f, pcm, pitch, hnr, visual=(opt.graphic == "cepgm"))
+        h = np.zeros(nSamples)
+        i = 0
+        frame = 0
+        while i < nSamples and frame < len(pitch):
+            period = int(1.0 / pitch[frame] * r)
+            if i + period > nSamples:
+                break
+            h[i] = 1 # np.random.normal() ** 2
+            i += period
+            frame = i // framePeriod
+        fh = ssp.Frame(h, size=frameSize, period=framePeriod)
+        gl = ssp.MinPhaseGlottis()
+        for i in range(len(fh)):
+            # This is minimum phase; the glotter will invert if required
+            gl.setpolepair(np.abs(magni[frame]), theta[frame])
+            fh[i] = gl.glotter(fh[i])
+            if linalg.norm(fh[i]) > 1e-6:
+                fh[i] *= np.sqrt(len(fh[i])) / linalg.norm(fh[i])
+            weight = np.sqrt(hnr[i] / (hnr[i] + 1))
+            fh[i] *= weight
+
+        if (opt.graphic == "h"):
+            fig = ssp.Figure(1, 1)
+            hPlot = fig.subplot()
+            hPlot.plot(h, 'r')
+            fig.show()
+
+        # Noise part
+        n = np.random.normal(size=nSamples)
+        zero = ssp.parameter("NoiseZero", 1.0)
+        n = ssp.ZeroFilter(n, zero) # Include the radiation impedance
         fn = ssp.Frame(n, size=frameSize, period=framePeriod)
         for i in range(len(fn)):
             fn[i] *= np.sqrt(1.0 / (hnr[i] + 1))
