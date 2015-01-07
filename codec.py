@@ -22,8 +22,12 @@ op.add_option("-f", dest="fileList",
               help="List of input output file pairs")
 op.add_option("-m", dest="framePeriod", action="store", type="int",
               help="Frame period")
+op.add_option("-a", dest="padding", action="store_false", default=True,
+              help="Frame padding")
 op.add_option("-e", dest="encode", action="store_true", default=False,
               help="Encode source files")
+op.add_option("-s", dest="glottal", default='synth',
+              help="Source (glottal) signal encoding")
 op.add_option("-p", dest="pitch", action="store_true", default=False,
               help="Encode source files, linear cont. pitch only")
 op.add_option("-d", dest="decode", action="store_true", default=False,
@@ -80,10 +84,11 @@ def encode(a, pcm):
     pitchSize = pcm.seconds_to_period(0.1, 'atmost')
     print "Encoding with period", framePeriod, "size", frameSize, \
           "and pitch window", pitchSize
+    print "Frame padding:", opt.padding
 
     # First the pitch as it's on the unaltered waveform.  The frame
     # should be long with no window.  1024 at 16 kHz is 64 ms.
-    pf = ssp.Frame(a, size=pitchSize, period=framePeriod)
+    pf = ssp.Frame(a, size=pitchSize, period=framePeriod, pad=opt.padding)
     pitch, hnr = ssp.ACPitch(pf, pcm)
 
     # Pre-emphasis
@@ -94,7 +99,7 @@ def encode(a, pcm):
     # Keep f around after the function so the decoder can do a
     # reference decoding on the real excitaton.
     global f
-    f = ssp.Frame(a, size=frameSize, period=framePeriod)
+    f = ssp.Frame(a, size=frameSize, period=framePeriod, pad=opt.padding)
     #aw = np.hanning(frameSize+1)
     aw = ssp.nuttall(frameSize+1)
     aw = np.delete(aw, -1)
@@ -123,14 +128,26 @@ def encode(a, pcm):
         sPlot.set_ylim(0, 500)
         fig.show()
 
+    if (len(ar) > len(pitch)):
+        # pad pitch and hnr (the sizes may differ if frame padding is false)
+        d = len(ar) - len(pitch)
+        addon = np.ones(d) * pitch[-1]
+        c = np.hstack((pitch, addon))
+        pitch = c
+        addon = np.ones(d) * hnr[-1]
+        c = np.hstack((hnr, addon))
+        hnr = c
+
     return (ar, g, pitch, hnr)
 
 
-def decode((ar, g, pitch, hnr)):
+def decode((ark, g, pitch, hnr)):
     """
     Decode a speech waveform.
     """
-    nFrames = len(ar)
+    print "Frame padding:", opt.padding
+
+    nFrames = len(ark)
     assert(len(g) == nFrames)
     assert(len(pitch) == nFrames)
     assert(len(hnr) == nFrames)
@@ -144,7 +161,14 @@ def decode((ar, g, pitch, hnr)):
         frameSize = framePeriod
         nSamples = frameSize * (nFrames-1)
 
-    ex = ssp.parameter('Excitation', 'synth')
+    ex = opt.glottal
+    if opt.glottal == 'cepgm':
+        order = ark.shape[-1] - 2
+        ar = ark[:,0:order]
+        theta = ark[:,-2]
+        magni = np.exp(ark[:,-1])
+    else:
+        ar = ark
 
     # Use the original AR residual; it should be a very good reconstruction.
     if ex == 'ar':
@@ -181,12 +205,12 @@ def decode((ar, g, pitch, hnr)):
             i += period
             frame = i // framePeriod
         h = ssp.ARExcitation(h, pr, 1.0)
-        fh = ssp.Frame(h, size=frameSize, period=framePeriod)
+        fh = ssp.Frame(h, size=frameSize, period=framePeriod, pad=opt.padding)
 
         # Noise part
         n = np.random.normal(size=nSamples)
         n = ssp.ZeroFilter(n, 1.0) # Include the radiation impedance
-        fn = ssp.Frame(n, size=frameSize, period=framePeriod)
+        fn = ssp.Frame(n, size=frameSize, period=framePeriod, pad=opt.padding)
         for i in range(len(fn)):
             fn[i] *= np.sqrt(1.0 / (hnr[i] + 1))
 
@@ -205,9 +229,9 @@ def decode((ar, g, pitch, hnr)):
             weight = np.sqrt(hnr[frame] / (hnr[frame] + 1))
             h[i:i+framePeriod] = ( sine.sample(pitch[frame], framePeriod)
                                       * weight )
-        fh = ssp.Frame(h, size=frameSize, period=framePeriod)
+        fh = ssp.Frame(h, size=frameSize, period=framePeriod, pad=opt.padding)
         n = np.random.normal(size=nSamples)
-        fn = ssp.Frame(n, size=frameSize, period=framePeriod)
+        fn = ssp.Frame(n, size=frameSize, period=framePeriod, pad=opt.padding)
         for i in range(len(fn)):
             fn[i] *= np.sqrt(1.0 / (hnr[i] + 1))
         e = fn + fh*10
@@ -271,7 +295,7 @@ def decode((ar, g, pitch, hnr)):
         nf = ssp.parameter("NoiseFreq", 4000)
         if npole is not None:
             n = ssp.PolePairFilter(n, npole, pcm.hertz_to_radians(nf))
-        fn = ssp.Frame(n, size=frameSize, period=framePeriod)
+        fn = ssp.Frame(n, size=frameSize, period=framePeriod, pad=opt.padding)
         for i in range(len(fn)):
             fn[i] *= np.sqrt(1.0 / (hnr[i] + 1))
 
@@ -308,13 +332,13 @@ def decode((ar, g, pitch, hnr)):
             h[i:i+period] = pu * weight
             i += period
             frame = i // framePeriod
-        fh = ssp.Frame(h, size=frameSize, period=framePeriod)
+        fh = ssp.Frame(h, size=frameSize, period=framePeriod, pad=opt.padding)
 
         # Noise part
         n = np.random.normal(size=nSamples)
         zero = ssp.parameter("NoiseZero", 1.0)
         n = ssp.ZeroFilter(n, zero) # Include the radiation impedance
-        fn = ssp.Frame(n, size=frameSize, period=framePeriod)
+        fn = ssp.Frame(n, size=frameSize, period=framePeriod, pad=opt.padding)
         for i in range(len(fn)):
             fn[i] *= np.sqrt(1.0 / (hnr[i] + 1))
 
@@ -333,8 +357,8 @@ def decode((ar, g, pitch, hnr)):
     elif ex == 'cepgm':
         # Infer the unstable poles via complex cepstrum, then build an explicit
         # glottal model.
-        theta, magni = ssp.glottal_pole_gm(
-            f, pcm, pitch, hnr, visual=(opt.graphic == "cepgm"))
+        # theta, magni = ssp.glottal_pole_gm(
+        #     f, pcm, pitch, hnr, visual=(opt.graphic == "cepgm"))
         h = np.zeros(nSamples)
         i = 0
         frame = 0
@@ -345,7 +369,7 @@ def decode((ar, g, pitch, hnr)):
             h[i] = 1 # np.random.normal() ** 2
             i += period
             frame = i // framePeriod
-        fh = ssp.Frame(h, size=frameSize, period=framePeriod)
+        fh = ssp.Frame(h, size=frameSize, period=framePeriod, pad=opt.padding)
         gl = ssp.MinPhaseGlottis()
         for i in range(len(fh)):
             # This is minimum phase; the glotter will invert if required
@@ -366,7 +390,7 @@ def decode((ar, g, pitch, hnr)):
         n = np.random.normal(size=nSamples)
         zero = ssp.parameter("NoiseZero", 1.0)
         n = ssp.ZeroFilter(n, zero) # Include the radiation impedance
-        fn = ssp.Frame(n, size=frameSize, period=framePeriod)
+        fn = ssp.Frame(n, size=frameSize, period=framePeriod, pad=opt.padding)
         for i in range(len(fn)):
             fn[i] *= np.sqrt(1.0 / (hnr[i] + 1))
 
@@ -430,19 +454,32 @@ for pair in pairs:
         a = pcm.WavSource(loadFile)
         (ar, g, pitch, hnr) = encode(a, pcm)
 
+        (path, ext) = splitext(saveFile)
         # The cepstrum part is just like HTK
         if opt.lsp:
             # The gain is not part of the LSP; just append it
             l = ssp.ARLineSpectra(ar)
             lg = np.reshape(np.log(g), (len(g), 1))
-            c = np.append(l, lg, axis=-1)
+            k = np.append(l, lg, axis=-1)
         else:
-            c = ssp.ARCepstrum(ar, g, lpOrder[r])
+            k = ssp.ARCepstrum(ar, g, lpOrder[r])
+
+        if opt.glottal == 'cepgm':
+            theta, magni = ssp.glottal_pole_gm(f, pcm, pitch, hnr)
+            t = np.reshape(theta, (len(theta), 1))
+            m = np.reshape(np.log(magni), (len(magni), 1))
+            e = np.concatenate((t, m), axis=-1)
+            # (path, ext) = splitext(saveFile)
+            # saveFileGlottal = path + ".cepgm"
+            # np.savetxt(saveFileGlottal, e)
+            c = np.append(k, e, axis=-1)
+        else:
+            c = k
+
         period = float(framePeriod)/r
         ssp.HTKSink(saveFile, c, period, native=opt.native)
 
         # F0 and HNR are both text formats
-        (path, ext) = splitext(saveFile)
         saveFileLF0 = path + ".f0"
         saveFileHNR = path + ".hnr"
         np.savetxt(saveFileLF0, np.log(pitch))
@@ -463,12 +500,24 @@ for pair in pairs:
         loadFileHNR = path + ".hnr"
         pitch = np.exp(np.loadtxt(loadFileLF0))
         hnr = np.loadtxt(loadFileHNR)
-        c, period = ssp.HTKSource(loadFile, native=opt.native)
+        cepstra, period = ssp.HTKSource(loadFile, native=opt.native)
+        if opt.glottal == 'cepgm':
+            # Separate glottal parameters
+            order = cepstra.shape[-1] - 2
+            c = cepstra[:,0:order]
+            excitation = cepstra[:,-2:]
+        else:
+            c = cepstra
         if opt.lsp:
             # Separate out the gain and LSP
-            ar = ssp.ARLineSpectraToPoly(c[:,0:-1])
+            ark = ssp.ARLineSpectraToPoly(c[:,0:-1])
             g = np.exp(c[:,-1])
         else:
-            (ar, g) = ssp.ARCepstrumToPoly(c)
+            (ark, g) = ssp.ARCepstrumToPoly(c)
+        if opt.glottal == 'cepgm':
+            ar = np.concatenate((ark, excitation), axis=-1)
+        else:
+            ar = ark
+
         d = decode((ar, g, pitch, hnr))
         pcm.WavSink(d, saveFile)
