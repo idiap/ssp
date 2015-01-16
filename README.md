@@ -60,6 +60,20 @@ The pitch tracker in SSP is documented in the paper:
 and there is a [downloadable
 pdf](http://publications.idiap.ch/downloads/papers/2012/Garner_SPL_2012.pdf).
 
+The codec is documented in a technical report:
+```
+@TechReport{GarnerTech2015,
+  author =      "Garner, Philip N. and Cernak, Milos and Potard, Blaise",
+  title =       "A simple continuous excitation model for parametric vocoding",
+  institution = "Idiap Research Institute",
+  year =        2015,
+  type =        "Idiap-RR",
+  number =	    "03-2015",
+  month =       "January"
+}
+```
+and again there is a [downloadable pdf](http://publications.idiap.ch/downloads/reports/2014/Garner_Idiap-RR-03-2015.pdf).
+
 --
-[Phil Garner](http://www.idiap.ch/~pgarner)  
+[Phil Garner](http://www.idiap.ch/~pgarner)
 June 2013
