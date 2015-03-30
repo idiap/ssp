@@ -162,7 +162,7 @@ def decode((ark, g, pitch, hnr)):
         nSamples = frameSize * (nFrames-1)
 
     ex = opt.glottal
-    if opt.glottal == 'cepgm':
+    if opt.glottal == 'cepgm' and (opt.encode or opt.decode or opt.pitch):
         order = ark.shape[-1] - 2
         ar = ark[:,0:order]
         theta = ark[:,-2]
@@ -357,8 +357,9 @@ def decode((ark, g, pitch, hnr)):
     elif ex == 'cepgm':
         # Infer the unstable poles via complex cepstrum, then build an explicit
         # glottal model.
-        # theta, magni = ssp.glottal_pole_gm(
-        #     f, pcm, pitch, hnr, visual=(opt.graphic == "cepgm"))
+        if not (opt.encode or opt.decode or opt.pitch):
+            theta, magni = ssp.glottal_pole_gm(
+                f, pcm, pitch, hnr, visual=(opt.graphic == "cepgm"))
         h = np.zeros(nSamples)
         i = 0
         frame = 0
@@ -445,6 +446,7 @@ for pair in pairs:
     if not (opt.encode or opt.decode or opt.pitch):
         a = pcm.WavSource(loadFile)
         d = decode(encode(a, pcm))
+         
         if opt.normalise:
             d *= linalg.norm(a)/linalg.norm(d)
         pcm.WavSink(d, saveFile)
