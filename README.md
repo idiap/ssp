@@ -1,6 +1,6 @@
 # SSP - Speech Signal Processing module
 
-SSP is released under the Gnu GPL version 3.  See the file `COPYING`
+SSP is released under a BSD licence.  See the file `COPYING`
 for details.
 
 To install SSP from git, just clone it into a working directory:
@@ -54,7 +54,8 @@ The pitch tracker in SSP is documented in the paper:
   month =        "January",
   volume =       20,
   number =       1,
-  pages =        "102--105"
+  pages =        "102--105",
+  doi =          "10.1109/LSP.2012.2231675"
 }
 ```
 and there is a [downloadable
