@@ -21,7 +21,7 @@ op.add_option("-r", dest="rate", default='16000',
 op.add_option("-f", dest="fileList",
               help="List of input output file pairs")
 op.add_option("-m", dest="framePeriod", action="store", type="int",
-              help="Frame period")
+              default=80, help="Frame period")
 op.add_option("-a", dest="padding", action="store_false", default=True,
               help="Frame padding")
 op.add_option("-e", dest="encode", action="store_true", default=False,
@@ -44,6 +44,10 @@ op.add_option("-N", dest="native", action="store_true", default=False,
               help="Read and write HTK files using native byte order")
 op.add_option("-g", dest="graphic", action="store",
               help="Show graphic feedback")
+op.add_option("--F0min", dest="loPitch", default='40',
+              help="f0 min value")
+op.add_option("--F0max", dest="hiPitch", default='500',
+              help="f0 max value")
 (opt, arg) = op.parse_args()
 
 # For excitation we need to disable OLA
@@ -89,8 +93,9 @@ def encode(a, pcm):
     # First the pitch as it's on the unaltered waveform.  The frame
     # should be long with no window.  1024 at 16 kHz is 64 ms.
     pf = ssp.Frame(a, size=pitchSize, period=framePeriod, pad=opt.padding)
-    pitch, hnr = ssp.ACPitch(pf, pcm)
-
+    print 'F0min: ', int(opt.loPitch), 'F0max: ', int(opt.hiPitch)
+    pitch, hnr = ssp.ACPitch(pf, pcm, int(opt.loPitch), int(opt.hiPitch))
+    
     # Pre-emphasis
     pre = ssp.parameter("Pre", None)
     if pre is not None:
@@ -432,10 +437,7 @@ def decode((ark, g, pitch, hnr)):
 #
 r = int(opt.rate)
 pcm = ssp.PulseCodeModulation(r)
-if opt.framePeriod:
-    framePeriod = opt.framePeriod
-else:
-    framePeriod = pcm.seconds_to_period(0.005, 'atleast') # 5ms period
+framePeriod = opt.framePeriod    # 5ms by default
 
 for pair in pairs:
     loadFile, saveFile = pair.strip().split()
