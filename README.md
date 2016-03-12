@@ -1,7 +1,21 @@
 # SSP - Speech Signal Processing module
 
-SSP is released under a BSD licence.  See the file `COPYING`
-for details.
+## Overview
+
+SSP is a package for doing signal processing in python; the functionality is
+biassed towards speech signals.  Top level programs include a feature extracter
+for speech recognition, and a vocoder for both coding and speech synthesis.
+The vocoder is based on linear prediction, but with several experimental
+excitation models.  A continuous pitch extraction algorithm is also provided,
+built around standard components and a Kalman filter.
+
+There is a "sister" package, [libssp](https://github.com/idiap/libssp), that
+includes translations of some algorithms in C++.  Libssp is built around
+[libube](https://github.com/pgarner/libube) that makes this translation easier.
+
+SSP is released under a BSD licence.  See the file `COPYING` for details.
+
+## Installation
 
 To install SSP from git, just clone it into a working directory:
 ```sh
@@ -40,8 +54,11 @@ or
 ```sh
 pip install ssp --user  # User level in ~/.local
 ```
+Note that the PyPI package is very likely to be out of date!
 
 Otherwise, see the wiki at https://github.com/idiap/ssp/wiki
+
+## Publications
 
 The pitch tracker in SSP is documented in the paper:
 ```
