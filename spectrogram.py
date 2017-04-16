@@ -1,4 +1,4 @@
-#!/usr/bin/python2
+#!/usr/bin/python2.7
 #
 # Copyright 2011 by Idiap Research Institute, http://www.idiap.ch
 #

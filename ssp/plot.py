@@ -12,7 +12,8 @@ import matplotlib
 import matplotlib.pyplot as plt
 import ssp
 
-from mpl_toolkits.axes_grid1 import make_axes_locatable
+# I can't remember why this was necessary, but it fails on my Mac
+# from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 class Figure:
     """
