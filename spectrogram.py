@@ -1,4 +1,4 @@
-#!/usr/bin/python2.7
+#!/usr/bin/env python3
 #
 # Copyright 2011 by Idiap Research Institute, http://www.idiap.ch
 #
@@ -11,7 +11,7 @@ from optparse import OptionParser
 op = OptionParser()
 (option, arg) = op.parse_args()
 if (len(arg) < 1):
-    print "Need one arg"
+    print("Need one arg")
     exit(1)
 file = arg[0]
 
@@ -32,7 +32,7 @@ wf = ssp.Window(f, w)
 type = ssp.parameter('Type', 'psd')
 if type == 'psd':
     p = ssp.Periodogram(wf)
-    p = p[:,:p.shape[1]/2+1]
+    p = p[:,:p.shape[1]//2+1]
 elif type == 'ar':
     a = ssp.Autocorrelation(wf)
     a, g = ssp.ARLevinson(a, pcm.speech_ar_order())

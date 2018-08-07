@@ -16,7 +16,7 @@ from scipy.io import wavfile
 from os import environ
 def parameter(param, default=None):
     if param in environ:
-        print 'export {0}={1}'.format(param, environ[param])
+        print("export {0}={1}".format(param, environ[param]))
         # Try to cast it to a numeric type
         for caster in (int, float):
             try:
@@ -26,7 +26,7 @@ def parameter(param, default=None):
         return environ[param]
     else:
         # Otherwise it's whatever was supplied as a default
-        print '# export {0}={1}'.format(param, default)
+        print("# export {0}={1}".format(param, default))
         return default
 
 
@@ -149,9 +149,9 @@ class PulseCodeModulation:
         while s < period:
             s *= 2
         if s == period or power == 'atleast':
-            return s
+            return int(s)
         else:
-            return s/2
+            return int(s/2)
 
     def hertz_to_radians(self, hz):
         """ Returns the angle corresponding to a value in Hertz """
@@ -208,8 +208,8 @@ def PolePairFilter(a, mag, angle):
 def Frame(a, size=512, period=256, pad=True):
     if pad:
         # This ensures that frames are aligned in the centre
-        x = [a[0]]*(size/2)
-        y = [a[-1]]*(size/2)
+        x = [a[0]]*(size//2)
+        y = [a[-1]]*(size//2)
         a = np.concatenate((x, a, y))
     nFrames = (a.size - (size-period)) // period
     frame = np.zeros((nFrames, size))
@@ -241,7 +241,7 @@ def ZeroMean(a):
     return ret
 
 def Periodogram(a):
-    size = a.shape[-1]/2 + 1
+    size = a.shape[-1]//2 + 1
     ret = np.ones(newshape(a.shape, size))
     for i, o in refiter([a, ret], newshape(a.shape)):
         o[...] = np.abs(np.fft.fft(i)[:size])**2
@@ -251,7 +251,7 @@ def Harmonogram(a, input=None, norm=False):
     if input == 'psd':
         size = a.shape[-1]
     else:
-        size = a.shape[-1]/2 + 1
+        size = a.shape[-1]//2 + 1
     ret = np.zeros(newshape(a.shape, size))
 
     for i, o in refiter([a, ret], newshape(a.shape)):
@@ -281,7 +281,7 @@ def Autocorrelation(a, power=2, input=None):
     if input == 'psd':
         size = a.shape[-1]
     else:
-        size = a.shape[-1]/2 + 1
+        size = a.shape[-1]//2 + 1
     ret = np.ndarray(newshape(a.shape, size))
 
     for i, o in refiter([a, ret], newshape(a.shape)):
@@ -426,13 +426,13 @@ parmKind = {
     "MELSPEC":   8,
     "USER":      9,
     "PLP":      11,
-    "E":   0000100,
-    "N":   0000200,
-    "D":   0000400,
-    "A":   0001000,
-    "Z":   0004000,
-    "0":   0020000,
-    "T":   0100000
+    "E":  0o000100,
+    "N":  0o000200,
+    "D":  0o000400,
+    "A":  0o001000,
+    "Z":  0o004000,
+    "0":  0o020000,
+    "T":  0o100000
 }
 
 # Sink to HTK file
@@ -441,13 +441,13 @@ from os import makedirs
 from os.path import dirname, exists
 def HTKSink(fileName, a, period=0.01, kind="USER", native=False):
     if (a.ndim != 2):
-        print "Dimension must be 2"
+        print("Dimension must be 2")
         exit(1)
 
     htkKind = 0
     for k in kind.split('_'):
         htkKind |= parmKind[k]
-    htkPeriod = period * 1e7 + 0.5
+    htkPeriod = int(period * 1e7 + 0.5)
     fmt = '>iihh'
     if native:
         fmt = 'iihh'
@@ -487,7 +487,7 @@ def HTKSource(fileName, native=False):
 def Mean(a):
     # Not quite sure of the meaning for non-2d
     if (a.ndim != 2):
-        print "Dimension must be 2"
+        print("Dimension must be 2")
         exit(1)
 
     return np.mean(a, axis=0)
@@ -506,7 +506,7 @@ def Subtract(a, m):
 def StdDev(a):
     # Not quite sure of the meaning for non-2d
     if (a.ndim != 2):
-        print "Dimension must be 2"
+        print("Dimension must be 2")
         exit(1)
 
     return np.std(a, axis=0)
@@ -524,7 +524,7 @@ def Divide(a, m):
 # Noise estimate; half at one end, half at the other
 def Noise(a, frames=10):
     if a.ndim != 2:
-        print "Dimension must be 2"
+        print("Dimension must be 2")
         exit(1)
 
     f = frames / 2
@@ -644,7 +644,7 @@ def ACPitch(a, pcm, loPitch=40, hiPitch=500):
     # The AC bin for the period of the lowest frequency needs to be
     # smaller than the size of the AC.
     if hiACBin >= fs / 2:
-        print "Frame size {0} too small for pitch {1} Hz".format(fs, loPitch)
+        print("Frame size {0} too small for pitch {1} Hz".format(fs, loPitch))
 
     # Basic spectral analysis, windowed, for reference.  Don't do
     # pre-emphasis; it will break low F0 speakers.
@@ -710,7 +710,7 @@ def ACPitch(a, pcm, loPitch=40, hiPitch=500):
     return kPitch, hnr
 
 def OverlapAdd(a):
-    step = a.shape[-1]/2
+    step = a.shape[-1]//2
     ret = np.zeros(step * (a.shape[0]+1))
     for i in range(a.shape[0]):
         x = step*i

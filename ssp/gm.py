@@ -104,7 +104,7 @@ def lf_te(T0, alpha, omega, epsilon, te=None):
     Given an LF model in terms of alpha, omega and epsilon, calculates
     Te using Newton-Raphson.
     """
-    print alpha, omega,
+    print(alpha, omega,)
     tc = T0
     tp = np.pi / omega
     if te is None:
@@ -129,11 +129,11 @@ def lf_te(T0, alpha, omega, epsilon, te=None):
             )
         te -= f/fd
         if te <= tp or te >= tc:
-            print "None"
+            print("None")
             return None
             # With proper initialisation, this should not happen
             #raise ValueError('te < tp')
-    print te
+    print(te)
     return te
 
 class GlottalModel:
@@ -180,7 +180,7 @@ class GlottalModel:
         T0 = pcm.period_to_seconds(n) # Fundamental period in seconds
         T = float(n)
         if self.ptype == 'impulse':
-            pulse[T/2] = 1
+            pulse[int(T/2)] = 1
         elif self.ptype == 'mipulse':
             pulse[T/2] = -1
         elif self.ptype == 'dimpulse':
@@ -283,7 +283,7 @@ class IncrementalFilter(filter.Filter):
     def filter(self, x):
         if self.state == None:
             self.alloc()
-            print "a:", self.a
+            print("a:", self.a)
         for i in range(1, len(self.state)):
             self.state[-i] = self.state[-i-1]
         self.state[0] = -x

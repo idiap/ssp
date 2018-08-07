@@ -1,4 +1,4 @@
-#!/usr/bin/python2.7
+#!/usr/bin/env python3
 #
 # Copyright 2011 by Idiap Research Institute, http://www.idiap.ch
 #
@@ -19,7 +19,7 @@ from optparse import OptionParser
 op = OptionParser()
 (option, arg) = op.parse_args()
 if (len(arg) < 1):
-    print "Need one arg"
+    print("Need one arg")
     exit(1)
 file = arg[0]
 
@@ -32,7 +32,7 @@ def lap(func):
   now = time.clock()
   elapsed = now-ti
   ti = now
-  print func, elapsed
+  print(func, elapsed)
 
 import ssp
 import numpy as np
@@ -42,12 +42,12 @@ lap("Import")
 # Load and do basic AR to reconstruct the spectrum
 pcm = ssp.PulseCodeModulation()
 wav = pcm.WavSource(file)
-print "File:", file, "rate:", pcm.rate, "size:", wav.size
+print("File:", file, "rate:", pcm.rate, "size:", wav.size)
 if ssp.parameter("ZF", 0) == 1:
     wav = ssp.ZeroFilter(wav)
 f = ssp.Frame(wav, size=256, period=128)
 f = ssp.Window(f, np.hanning(256))
-print "frame:", f.shape[0], "x", f.shape[1]
+print("frame:", f.shape[0], "x", f.shape[1])
 lap("Frame")
 e = ssp.Energy(f)
 p = ssp.Periodogram(f)

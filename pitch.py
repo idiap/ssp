@@ -1,4 +1,4 @@
-#!/usr/bin/python2.7
+#!/usr/bin/env python3
 #
 # Copyright 2011 by Idiap Research Institute, http://www.idiap.ch
 #
@@ -23,7 +23,7 @@ from optparse import OptionParser
 op = OptionParser()
 (option, arg) = op.parse_args()
 if (len(arg) < 1):
-    print "Need one arg"
+    print("Need one arg")
     exit(1)
 wavFile = arg[0]
 
@@ -52,7 +52,7 @@ elif pcm.rate == 96000:
     fs = 8192
     fp = 160
 
-print "Frame period", fp, "is", fp/float(pcm.rate)*1000, "ms, or", float(pcm.rate) / fp, "Hz"
+print("Frame period", fp, "is", fp/float(pcm.rate)*1000, "ms, or", float(pcm.rate) / fp, "Hz")
 
 loPitch = 40
 hiPitch = 500
@@ -62,16 +62,16 @@ hiPeriod = 1.0 / hiPitch
 
 loDFTBin = pcm.hertz_to_dftbin(loPitch, fs)
 hiDFTBin = pcm.hertz_to_dftbin(hiPitch, fs)
-print "Pitch range is bins", loDFTBin, "to", hiDFTBin
+print("Pitch range is bins", loDFTBin, "to", hiDFTBin)
 
 loACBin = pcm.seconds_to_acbin(hiPeriod)
 hiACBin = pcm.seconds_to_acbin(loPeriod)
-print "Period range is bins", loACBin, "to", hiACBin
+print("Period range is bins", loACBin, "to", hiACBin)
 
 # The AC bin for the period of the lowest frequency needs to be
 # smaller than the size of the AC.
 if hiACBin >= fs / 2:
-    print "Frame size {0} too small for pitch {1} Hz".format(fs, loPitch)
+    print("Frame size {0} too small for pitch {1} Hz".format(fs, loPitch))
 
 # Add noise
 #a += np.random.normal(size=len(a)) * 1e-3

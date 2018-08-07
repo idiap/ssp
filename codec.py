@@ -1,4 +1,4 @@
-#!/usr/bin/python2.7
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
 # Copyright 2012 by Idiap Research Institute, http://www.idiap.ch
@@ -61,7 +61,7 @@ if opt.fileList:
         pairs = f.readlines()
 else:
     if len(arg) != 2:
-        print "Need two args if no file list"
+        print("Need two args if no file list")
         exit(1)
     pairs = [ ' '.join(arg) ]
 
@@ -86,14 +86,14 @@ def encode(a, pcm):
     else:
         frameSize = framePeriod
     pitchSize = pcm.seconds_to_period(0.1, 'atmost')
-    print "Encoding with period", framePeriod, "size", frameSize, \
-          "and pitch window", pitchSize
-    print "Frame padding:", opt.padding
+    print("Encoding with period", framePeriod, "size", frameSize,
+          "and pitch window", pitchSize)
+    print("Frame padding:", opt.padding)
 
     # First the pitch as it's on the unaltered waveform.  The frame
     # should be long with no window.  1024 at 16 kHz is 64 ms.
     pf = ssp.Frame(a, size=pitchSize, period=framePeriod, pad=opt.padding)
-    print 'F0min: ', int(opt.loPitch), 'F0max: ', int(opt.hiPitch)
+    print('F0min: ', int(opt.loPitch), 'F0max: ', int(opt.hiPitch))
     pitch, hnr = ssp.ACPitch(pf, pcm, int(opt.loPitch), int(opt.hiPitch))
     
     # Pre-emphasis
@@ -146,11 +146,12 @@ def encode(a, pcm):
     return (ar, g, pitch, hnr)
 
 
-def decode((ark, g, pitch, hnr)):
+def decode(tuple):
     """
     Decode a speech waveform.
     """
-    print "Frame padding:", opt.padding
+    (ark, g, pitch, hnr) = tuple
+    print("Frame padding:", opt.padding)
 
     nFrames = len(ark)
     assert(len(g) == nFrames)
@@ -253,8 +254,8 @@ def decode((ark, g, pitch, hnr)):
         for i in range(len(fn)):
             hoar = ssp.ARHarmonicPoly(pitch[i], r, 0.7)
             fh[i] = ssp.ARResynthesis(fn[i], hoar, 1.0 / linalg.norm(hoar)**2)
-            print i, pitch[i], linalg.norm(hoar), np.min(fh[i]), np.max(fh[i])
-            print ' ', np.min(hoar), np.max(hoar)
+            print(i, pitch[i], linalg.norm(hoar), np.min(fh[i]), np.max(fh[i]))
+            print(' ', np.min(hoar), np.max(hoar))
             # fh[i] *= np.sqrt(r / pitch[i]) / linalg.norm(fh[i])
             # fh[i] *= np.sqrt(hnr[i] / (hnr[i] + 1))
 
@@ -330,7 +331,7 @@ def decode((ark, g, pitch, hnr)):
             weight = np.sqrt(hnr[frame] / (hnr[frame] + 1))
             pu = np.zeros((period))
             T0 = pcm.period_to_seconds(period)
-            print T0,
+            print(T0,)
             Te = ssp.lf_te(T0, alpha[frame], omega[frame], epsilon)
             if Te:
                 pu = ssp.pulse_lf(pu, T0, Te, alpha[frame], omega[frame], epsilon)
@@ -413,7 +414,7 @@ def decode((ark, g, pitch, hnr)):
             e[i] = ssp.ARExcitation(e[i], ea, eg)
 
     else:
-        print "Unknown synthesis method"
+        print("Unknown synthesis method")
         exit
 
     if opt.excitation:

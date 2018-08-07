@@ -1,4 +1,4 @@
-#!/usr/bin/python2.7
+#!/usr/bin/env python3
 #
 # Copyright 2011 by Idiap Research Institute, http://www.idiap.ch
 #
@@ -23,14 +23,14 @@ if opt.fileList:
         pairs = f.readlines()
 else:
     if len(arg) != 2:
-        print "Need two args if no file list"
+        print("Need two args if no file list")
         exit(1)
     pairs = [ ' '.join(arg) ]
 
 for pair in pairs:
     loadFile, saveFile = pair.strip().split()
 
-    print "wav: ", loadFile
+    print("wav: ", loadFile)
     pcm = ssp.PulseCodeModulation()
     a = pcm.WavSource(loadFile)
 
@@ -75,7 +75,7 @@ for pair in pairs:
         fw = np.dot(f,m.T)
         a, g = ssp.ARStudent(fw, lpOrder, ssp.parameter("DoF", 1.0))
     else:
-        print "Unknown front end", frontend
+        print("Unknown front end", frontend)
 
 #    a, g = ARAllPassWarp(a, g, alpha=mel[r])
 
@@ -86,5 +86,5 @@ for pair in pairs:
     m = ssp.StdDev(a)
     a = ssp.Divide(a, m)
 
-    print "htk: ", saveFile
+    print("htk: ", saveFile)
     ssp.HTKSink(saveFile, a, 0.01, "USER")

@@ -56,7 +56,7 @@ def ARMatrix(a, order=10, method='matrix'):
         coef = np.dot(linalg.inv(YY), Yy)
         gain = (ac[0] - np.dot(coef,Yy / a.size))
     else:
-        print "Unknown AR method"
+        print("Unknown AR method")
         exit(1)
 
     return (coef, gain)
@@ -450,7 +450,7 @@ def ARHarmonicPoly(f0, rate, mag=0.99):
         # powers.
         poly = pn.polyfromroots(roots).real[-2::-1]
     if np.max(np.abs(poly)) >= 1.0:
-        print roots, np.prod(roots), poly
+        print(roots, np.prod(roots), poly)
         raise OverflowError('Poly too big')
     return -poly
 
@@ -458,7 +458,7 @@ def pulse_response(gm, pcm, period=100, order=18):
     # Build a pulse train and find the autocorrelation
     w = 1024
     p = gm.pulse(period, pcm)
-    p = np.tile(p, w/period+1)
+    p = np.tile(p, int(w/period+1))
     p = core.Window(p[:w], np.hanning(w))
     ac = core.Autocorrelation(p)
     a, g = ARLevinson(ac, order=order)
